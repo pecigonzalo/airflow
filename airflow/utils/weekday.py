@@ -15,10 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 """Get the ISO standard day number of the week from a given day string."""
+
 from __future__ import annotations
 
 import enum
-from typing import Iterable
+from collections.abc import Iterable
 
 
 @enum.unique
@@ -50,7 +51,7 @@ class WeekDay(enum.IntEnum):
 
     @classmethod
     def convert(cls, day: str | WeekDay) -> int:
-        """Helper function that returns the day number in the week."""
+        """Return the day number in the week."""
         if isinstance(day, WeekDay):
             return day
         return cls.get_weekday_number(week_day_str=day)

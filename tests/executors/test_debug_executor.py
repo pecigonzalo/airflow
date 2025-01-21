@@ -50,7 +50,7 @@ class TestDebugExecutor:
         succeeded = executor._run_task(task_instance_mock)
 
         assert succeeded
-        task_instance_mock.run.assert_called_once_with(job_id=job_id)
+        task_instance_mock.run.assert_called()
 
     def test_queue_task_instance(self):
         key = "ti_key"
@@ -111,7 +111,7 @@ class TestDebugExecutor:
         assert not executor.tasks_to_run
         change_state_mock.assert_has_calls(
             [
-                mock.call(ti1.key, State.FAILED),
+                mock.call(ti1.key, State.FAILED, None),
                 mock.call(ti2.key, State.UPSTREAM_FAILED),
             ]
         )
@@ -119,8 +119,29 @@ class TestDebugExecutor:
     def test_reschedule_mode(self):
         assert DebugExecutor.change_sensor_mode_to_reschedule
 
-    def test_is_single_threaded(self):
-        assert DebugExecutor.is_single_threaded
-
     def test_is_production_default_value(self):
         assert not DebugExecutor.is_production
+
+    @mock.patch("time.sleep", autospec=True)
+    def test_trigger_sleep_when_no_task(self, mock_sleep):
+        execute_mock = MagicMock()
+        executor = DebugExecutor()
+        executor.execute_async = execute_mock
+        executor.queued_tasks = {}
+        executor.trigger_tasks(open_slots=5)
+        mock_sleep.assert_called()
+
+    @mock.patch("airflow.executors.debug_executor.DebugExecutor.change_state")
+    def test_sync_after_terminate(self, change_state_mock):
+        executor = DebugExecutor()
+
+        ti1 = MagicMock(key="t1")
+        executor.tasks_to_run = [ti1]
+        executor.terminate()
+        executor.sync()
+
+        change_state_mock.assert_has_calls(
+            [
+                mock.call(ti1.key, State.FAILED, None),
+            ]
+        )

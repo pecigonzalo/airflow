@@ -20,12 +20,15 @@ from __future__ import annotations
 import pytest
 
 from airflow.www.app import create_app
-from tests.test_utils.config import conf_vars
-from tests.test_utils.decorators import dont_initialize_flask_app_submodules
-from tests.test_utils.www import client_with_login
+
+from tests_common.test_utils.config import conf_vars
+from tests_common.test_utils.decorators import dont_initialize_flask_app_submodules
+from tests_common.test_utils.www import client_with_login
+
+pytestmark = pytest.mark.db_test
 
 
-@pytest.fixture()
+@pytest.fixture
 def app_with_rate_limit_one(examples_dag_bag):
     @dont_initialize_flask_app_submodules(
         skip_all_except=[
@@ -37,13 +40,10 @@ def app_with_rate_limit_one(examples_dag_bag):
             "init_jinja_globals",
             "init_plugins",
             "init_airflow_session_interface",
-            "init_check_user_active",
         ]
     )
     def factory():
-        with conf_vars(
-            {("webserver", "auth_rate_limited"): "True", ("webserver", "auth_rate_limit"): "1 per 20 second"}
-        ):
+        with conf_vars({("fab", "auth_rate_limited"): "True", ("fab", "auth_rate_limit"): "1 per 20 second"}):
             return create_app(testing=True)
 
     app = factory()

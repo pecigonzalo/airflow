@@ -29,7 +29,7 @@ This operator can be used to copy data from a BigQuery table to MSSQL.
 Prerequisite Tasks
 ^^^^^^^^^^^^^^^^^^
 
-.. include::/operators/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 .. _howto/operator:BigQueryToMsSqlOperator:
 
@@ -53,7 +53,7 @@ Transferring data
 
 The following Operator copies data from a BigQuery table to MsSQL.
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/bigquery/example_bigquery_to_mssql.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/bigquery/example_bigquery_to_mssql.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_bigquery_to_mssql]

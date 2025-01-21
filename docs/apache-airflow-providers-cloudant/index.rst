@@ -19,10 +19,18 @@
 ``apache-airflow-providers-cloudant``
 =====================================
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
@@ -34,43 +42,42 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-cloudant
+apache-airflow-providers-cloudant package
 ------------------------------------------------------
 
 `IBM Cloudant <https://www.ibm.com/cloud/cloudant>`__
 
 
-Release: 3.2.0
+Release: 4.1.0
 
 Provider package
 ----------------
 
-This is a provider package for ``cloudant`` provider. All classes for this provider package
-are in ``airflow.providers.cloudant`` python package.
+This package is for the ``cloudant`` provider.
+All classes for this package are included in the ``airflow.providers.cloudant`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-cloudant``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-cloudant``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
-==================  ==================
+==================  =====================================
 PIP package         Version required
-==================  ==================
-``apache-airflow``  ``>=2.4.0``
-``cloudant``        ``>=2.0``
-==================  ==================
-
-.. include:: ../../airflow/providers/cloudant/CHANGELOG.rst
+==================  =====================================
+``apache-airflow``  ``>=2.9.0``
+``ibmcloudant``     ``==0.9.1; python_version >= "3.10"``
+==================  =====================================

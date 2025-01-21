@@ -89,7 +89,7 @@ interface TableProps {
   pageSize?: number;
   isLoading?: boolean;
   selectRows?: (selectedRows: number[]) => void;
-  onRowClicked?: (row: Row<object>, e: any) => void;
+  onRowClicked?: (row: Row<object>, e: unknown) => void;
 }
 
 export const Table = ({
@@ -192,7 +192,7 @@ export const Table = ({
 
   return (
     <>
-      <ChakraTable {...getTableProps()}>
+      <ChakraTable {...getTableProps()} variant="striped">
         <Thead>
           <Tr>
             {allColumns.map((column) => (
@@ -244,7 +244,9 @@ export const Table = ({
                   }
                 }
                 onClick={
-                  onRowClicked ? (e: any) => onRowClicked(row, e) : undefined
+                  onRowClicked
+                    ? (e: unknown) => onRowClicked(row, e)
+                    : undefined
                 }
               >
                 {row.cells.map((cell) => (
@@ -286,4 +288,5 @@ export const Table = ({
   );
 };
 
+export * from "./CardList";
 export * from "./Cells";

@@ -17,8 +17,10 @@
 # under the License.
 from __future__ import annotations
 
+import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator, NamedTuple
+from typing import Any, NamedTuple
 
 import flask
 import jinja2
@@ -27,24 +29,30 @@ import pytest
 from airflow import settings
 from airflow.models import DagBag
 from airflow.www.app import create_app
-from tests.test_utils.api_connexion_utils import delete_user
-from tests.test_utils.config import conf_vars
-from tests.test_utils.decorators import dont_initialize_flask_app_submodules
-from tests.test_utils.www import client_with_login, client_without_login
+
+from tests_common.test_utils.api_connexion_utils import delete_user
+from tests_common.test_utils.config import conf_vars
+from tests_common.test_utils.db import parse_and_sync_to_db
+from tests_common.test_utils.decorators import dont_initialize_flask_app_submodules
+from tests_common.test_utils.www import (
+    client_with_login,
+    client_without_login,
+    client_without_login_as_admin,
+)
 
 
 @pytest.fixture(autouse=True, scope="module")
 def session():
     settings.configure_orm()
-    yield settings.Session
+    return settings.Session
 
 
 @pytest.fixture(autouse=True, scope="module")
 def examples_dag_bag(session):
-    DagBag(include_examples=True).sync_to_db()
-    dag_bag = DagBag(include_examples=True, read_dags_from_db=True)
+    parse_and_sync_to_db(os.devnull, include_examples=True)
+    dag_bag = DagBag(read_dags_from_db=True)
     session.commit()
-    yield dag_bag
+    return dag_bag
 
 
 @pytest.fixture(scope="module")
@@ -59,11 +67,10 @@ def app(examples_dag_bag):
             "init_jinja_globals",
             "init_plugins",
             "init_airflow_session_interface",
-            "init_check_user_active",
         ]
     )
     def factory():
-        with conf_vars({("webserver", "auth_rate_limited"): "False"}):
+        with conf_vars({("fab", "auth_rate_limited"): "False"}):
             return create_app(testing=True)
 
     app = factory()
@@ -110,25 +117,29 @@ def app(examples_dag_bag):
         delete_user(app, user_dict["username"])
 
 
-@pytest.fixture()
+@pytest.fixture
 def admin_client(app):
-
     return client_with_login(app, username="test_admin", password="test_admin")
 
 
-@pytest.fixture()
+@pytest.fixture
 def viewer_client(app):
     return client_with_login(app, username="test_viewer", password="test_viewer")
 
 
-@pytest.fixture()
+@pytest.fixture
 def user_client(app):
     return client_with_login(app, username="test_user", password="test_user")
 
 
-@pytest.fixture()
+@pytest.fixture
 def anonymous_client(app):
     return client_without_login(app)
+
+
+@pytest.fixture
+def anonymous_client_as_admin(app):
+    return client_without_login_as_admin(app)
 
 
 class _TemplateWithContext(NamedTuple):
@@ -160,6 +171,10 @@ class _TemplateWithContext(NamedTuple):
             "default_ui_timezone",
             "hostname",
             "navbar_color",
+            "navbar_text_color",
+            "navbar_hover_color",
+            "navbar_text_hover_color",
+            "navbar_logo_text_color",
             "log_fetch_delay_sec",
             "log_auto_tailing_offset",
             "log_animation_speed",
@@ -173,9 +188,12 @@ class _TemplateWithContext(NamedTuple):
             "scheduler_job",
             # airflow.www.views.AirflowBaseView.extra_args
             "macros",
+            "auth_manager",
+            "triggerer_job",
         ]
         for key in keys_to_delete:
-            del result[key]
+            if key in result:
+                del result[key]
 
         return result
 

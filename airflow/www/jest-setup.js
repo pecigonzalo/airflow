@@ -32,8 +32,10 @@ axios.defaults.adapter = require("axios/lib/adapters/http");
 axios.interceptors.response.use((res) => res.data || res);
 
 setLogger({
+  /* eslint-disable no-console */
   log: console.log,
   warn: console.warn,
+  /* eslint-enable no-console */
   // ✅ no more errors on the console
   error: () => {},
 });
@@ -47,7 +49,6 @@ global.stateColors = {
   restarting: "violet",
   running: "lime",
   scheduled: "tan",
-  shutdown: "blue",
   skipped: "hotpink",
   success: "green",
   up_for_reschedule: "turquoise",
@@ -57,4 +58,12 @@ global.stateColors = {
 
 global.defaultDagRunDisplayNumber = 245;
 
+global.filtersOptions = {
+  // Must stay in sync with airflow/www/static/js/types/index.ts
+  dagStates: ["success", "running", "queued", "failed"],
+  runTypes: ["manual", "backfill", "scheduled", "asset_triggered"],
+};
+
 global.moment = moment;
+
+global.autoRefreshInterval = undefined;

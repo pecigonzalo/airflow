@@ -30,7 +30,10 @@ from airflow.api_connexion.schemas.connection_schema import (
 )
 from airflow.models import Connection
 from airflow.utils.session import create_session, provide_session
-from tests.test_utils.db import clear_db_connections
+
+from tests_common.test_utils.db import clear_db_connections
+
+pytestmark = pytest.mark.db_test
 
 
 class TestConnectionCollectionItemSchema:
@@ -165,7 +168,7 @@ class TestConnectionSchema:
             schema="testschema",
             port=80,
             password="test-password",
-            extra="{'key':'string'}",
+            extra='{"key": "string"}',
         )
         session.add(connection_model)
         session.commit()
@@ -179,7 +182,7 @@ class TestConnectionSchema:
             "login": "login",
             "schema": "testschema",
             "port": 80,
-            "extra": "{'key':'string'}",
+            "extra": '{"key": "string"}',
         }
 
     def test_deserialize(self):

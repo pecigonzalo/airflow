@@ -49,7 +49,7 @@ Default Connection IDs
 -----------------------
 
 The default connection ID is ``aws_default``. If the environment/machine where you are running Airflow has the
-file credentials in ``/home/.aws/``, and the default connection has user and pass fields empty, it will take
+file credentials in ``${HOME}/.aws/``, and the default connection has user and pass fields empty, it will take
 automatically the credentials from there.
 
 .. important:: Previously, the ``aws_default`` connection had the "extras" field set to ``{"region_name": "us-east-1"}``
@@ -57,13 +57,13 @@ automatically the credentials from there.
     This is no longer the case and the region needs to be set manually, either in the connection screens in Airflow,
     or via the ``AWS_DEFAULT_REGION`` environment variable.
 
-.. caution:: If you do not set ``[database] load_default_connections`` to ``True``
+.. caution:: If you do not run "airflow connections create-default-connections" command,
     most probably you do not have ``aws_default``. For historical reasons, the Amazon Provider
     components (Hooks, Operators, Sensors, etc.) fallback to the default boto3 credentials strategy
-    in case of a missing Connection ID. This behaviour is deprecated and will be removed in a future releases.
+    in case of a missing Connection ID.
 
     If you need to use the default boto3 credential strategy (credentials in environment variables, IAM Profile, etc.)
-    please provide ``None`` instead of a connection ID.
+    please provide ``None``, instead of a missing connection ID, to avoid getting a warning in your logs.
 
 .. _howto/connection:aws:configuring-the-connection:
 
@@ -122,29 +122,19 @@ Extra (optional)
     * ``config_kwargs``: Additional **kwargs** used to construct a
       `botocore.config.Config <https://botocore.amazonaws.com/v1/documentation/api/latest/reference/config.html>`__.
       To anonymously access public AWS resources (equivalent of `signature_version=botocore.UNSGINED`), set `"signature_version"="unsigned"` within `config_kwargs`.
-    * ``endpoint_url``: Endpoint URL for the connection.
+    * ``endpoint_url``: Global Endpoint URL for the connection. You could specify endpoint url per AWS service by utilize
+      ``service_config``, for more details please refer to :ref:`howto/connection:aws:per-service-endpoint-configuration`
+
     * ``verify``: Whether or not to verify SSL certificates.
+
+        * ``False`` - Do not validate SSL certificates.
+        * **path/to/cert/bundle.pem** - A filename of the CA cert bundle to use. You can specify this argument
+          if you want to use a different CA cert bundle than the one used by botocore.
 
     The following extra parameters used for specific AWS services:
 
     * ``service_config``: json used to specify configuration/parameters per AWS service / Amazon provider hook,
       for more details please refer to :ref:`howto/connection:aws:per-service-configuration`.
-
-.. warning:: The extra parameters below are deprecated and will be removed in a future version of this provider.
-
-    * ``aws_account_id``: Used to construct ``role_arn`` if it was not specified.
-    * ``aws_iam_role``: Used to construct ``role_arn`` if it was not specified.
-    * ``external_id``: A unique identifier that might be required when you assume a role in another account.
-      Used if ``ExternalId`` in ``assume_role_kwargs`` was not specified.
-    * ``s3_config_file``: Path to local credentials file.
-    * ``s3_config_format``: ``s3_config_file`` format, one of
-      `aws <https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html#cli-configure-files-settings>`_,
-      `boto <http://boto.cloudhackers.com/en/latest/boto_config_tut.html#details>`_ or
-      `s3cmd <https://s3tools.org/kb/item14.htm>`_ if not specified then **boto** is used.
-    * ``profile``: If you are getting your credentials from the ``s3_config_file``
-      you can specify the profile with this parameter.
-    * ``host``: Used as connection's URL. Use ``endpoint_url`` instead.
-    * ``session_kwargs``: Additional **kwargs** passed to :external:py:class:`boto3.session.Session`.
 
 If you are configuring the connection via a URI, ensure that all components of the URI are URL-encoded.
 
@@ -343,6 +333,38 @@ The following settings may be used within the ``assume_role_with_saml`` containe
 Per-service configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. _howto/connection:aws:per-service-endpoint-configuration:
+
+AWS Service Endpoint URL configuration
+""""""""""""""""""""""""""""""""""""""
+
+To use ``endpoint_url`` per specific AWS service in the single connection you might setup it in service config.
+For enforce to default ``botocore``/``boto3`` behaviour you might set value to ``null``.
+The precedence rules are as follows:
+
+  1. ``endpoint_url`` specified per service level.
+  2. ``endpoint_url`` specified in root level of connection extra. Please note that **sts** client which are
+     uses in assume role or test connection do not use global parameter.
+  3. Default ``botocore``/``boto3`` behaviour
+
+
+.. code-block:: json
+
+    {
+      "endpoint_url": "s3.amazonaws.com"
+      "service_config": {
+        "s3": {
+          "endpoint_url": "https://s3.eu-west-1.amazonaws.com"
+        },
+        "sts": {
+          "endpoint_url": "https://sts.eu-west-2.amazonaws.com"
+        },
+        "ec2": {
+          "endpoint_url": null
+        }
+      }
+    }
+
 S3 Bucket configurations
 """"""""""""""""""""""""
 
@@ -361,6 +383,8 @@ provide selected options in the connection's extra field.
       }
     }
 
+
+.. _howto/connection:aws:avoid-throttling-exceptions:
 
 Avoid Throttling exceptions
 ---------------------------
@@ -746,7 +770,7 @@ Using IAM Roles for Service Accounts (IRSA) on EKS
 
 If you are running Airflow on `Amazon EKS <https://aws.amazon.com/eks/>`_,
 you can grant AWS related permission (such as S3 Read/Write for remote logging) to the Airflow service
-by granting the IAM role to it's service account.
+by granting the IAM role to its service account.
 IRSA provides fine-grained permission management for apps(e.g., pods) that run on EKS and use other AWS services.
 These could be apps that use S3, any other AWS services like Secrets Manager, CloudWatch, DynamoDB etc.
 
@@ -779,7 +803,7 @@ Create IAM Role for Service Account(IRSA) using eksctl
 
     eksctl utils associate-iam-oidc-provider --cluster="<EKS_CLUSTER_ID>" --approve
 
-4. Replace ``EKS_CLUSTER_ID``, ``SERVICE_ACCOUNT_NAME`` and ``NAMESPACE`` and execute the the following command.
+4. Replace ``EKS_CLUSTER_ID``, ``SERVICE_ACCOUNT_NAME`` and ``NAMESPACE`` and execute the following command.
 This command will use an existing EKS Cluster ID and create an IAM role, service account and namespace.
 
 .. code-block:: bash

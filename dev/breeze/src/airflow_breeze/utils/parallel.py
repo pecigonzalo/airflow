@@ -23,13 +23,14 @@ import sys
 import textwrap
 import time
 from abc import ABCMeta, abstractmethod
+from collections.abc import Generator
 from contextlib import contextmanager
 from enum import Enum
 from multiprocessing.pool import ApplyResult, Pool
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from threading import Thread
-from typing import Any, Generator, NamedTuple
+from typing import Any, NamedTuple
 
 from rich.table import Table
 
@@ -66,7 +67,7 @@ def get_temp_file_name() -> str:
 
 
 def get_output_files(titles: list[str]) -> list[Output]:
-    outputs = [Output(title=titles[i], file_name=get_temp_file_name()) for i in range(len(titles))]
+    outputs = [Output(title=title, file_name=get_temp_file_name()) for title in titles]
     for out in outputs:
         get_console().print(f"[info]Capturing output of {out.escaped_title}:[/] {out.file_name}")
     return outputs
@@ -209,7 +210,7 @@ def bytes2human(n):
         prefix[s] = 1 << (i + 1) * 10
     for s in reversed(symbols):
         if n >= prefix[s]:
-            value = float(n) / prefix[s]
+            value = n / prefix[s]
             return f"{value:.1f}{s}"
     return f"{n}B"
 
@@ -228,7 +229,7 @@ def get_single_tuple_array(title: str, t: NamedTuple) -> Table:
     for key, value in t._asdict().items():
         table.add_column(header=key, header_style="info")
         row.append(get_printable_value(key, value))
-    table.add_row(*row, style="magenta")
+    table.add_row(*row, style="special")
     return table
 
 
@@ -245,7 +246,7 @@ def get_multi_tuple_array(title: str, tuples: list[tuple[NamedTuple, ...]]) -> T
         for named_tuple in t:
             for key, value in named_tuple._asdict().items():
                 row.append(get_printable_value(key, value))
-        table.add_row(*row, style="magenta")
+        table.add_row(*row, style="special")
     return table
 
 
@@ -273,7 +274,7 @@ class ParallelMonitor(Thread):
         self,
         outputs: list[Output],
         initial_time_in_seconds: int = 2,
-        time_in_seconds: int = 10,
+        time_in_seconds: int = int(os.environ.get("AIRFLOW_MONITOR_DELAY_TIME_IN_SECONDS", "20")),
         debug_resources: bool = False,
         progress_matcher: AbstractProgressInfoMatcher | None = None,
     ):
@@ -283,7 +284,7 @@ class ParallelMonitor(Thread):
         self.time_in_seconds = time_in_seconds
         self.debug_resources = debug_resources
         self.progress_matcher = progress_matcher
-        self.start_time = datetime.datetime.utcnow()
+        self.start_time = datetime.datetime.now(tz=datetime.timezone.utc)
 
     def print_single_progress(self, output: Output):
         if self.progress_matcher:
@@ -312,7 +313,7 @@ class ParallelMonitor(Thread):
     def print_summary(self):
         import psutil
 
-        time_passed = datetime.datetime.utcnow() - self.start_time
+        time_passed = datetime.datetime.now(tz=datetime.timezone.utc) - self.start_time
         get_console().rule()
         for output in self.outputs:
             self.print_single_progress(output)
@@ -357,7 +358,7 @@ def print_async_summary(completed_list: list[ApplyResult]) -> None:
 
 def get_completed_result_list(results: list[ApplyResult]) -> list[ApplyResult]:
     """Return completed results from the list."""
-    return list(filter(lambda result: result.ready(), results))
+    return [result for result in results if result.ready()]
 
 
 class SummarizeAfter(Enum):
@@ -402,7 +403,7 @@ def check_async_run_results(
             completed_number = current_completed_number
             get_console().print(
                 f"\n[info]Completed {completed_number} out of {total_number_of_results} "
-                f"({int(100*completed_number/total_number_of_results)}%).[/]\n"
+                f"({completed_number / total_number_of_results:.0%}).[/]\n"
             )
             print_async_summary(completed_list)
         time.sleep(poll_time_seconds)
@@ -410,7 +411,7 @@ def check_async_run_results(
     completed_number = len(completed_list)
     get_console().print(
         f"\n[info]Completed {completed_number} out of {total_number_of_results} "
-        f"({int(100*completed_number/total_number_of_results)}%).[/]\n"
+        f"({completed_number / total_number_of_results:.0%}).[/]\n"
     )
     print_async_summary(completed_list)
     errors = False
@@ -443,16 +444,19 @@ def check_async_run_results(
     try:
         if errors:
             get_console().print("\n[error]There were errors when running some tasks. Quitting.[/]\n")
+            from airflow_breeze.utils.docker_command_utils import fix_ownership_using_docker
+
+            fix_ownership_using_docker()
             sys.exit(1)
         else:
             get_console().print(f"\n[success]{success}[/]\n")
+            from airflow_breeze.utils.docker_command_utils import fix_ownership_using_docker
+
+            fix_ownership_using_docker()
     finally:
         if not skip_cleanup:
             for output in outputs:
-                try:
-                    os.unlink(output.file_name)
-                except FileNotFoundError:
-                    pass
+                Path(output.file_name).unlink(missing_ok=True)
 
 
 @contextmanager
@@ -460,7 +464,7 @@ def run_with_pool(
     parallelism: int,
     all_params: list[str],
     initial_time_in_seconds: int = 2,
-    time_in_seconds: int = 10,
+    time_in_seconds: int = int(os.environ.get("AIRFLOW_MONITOR_DELAY_TIME_IN_SECONDS", "20")),
     debug_resources: bool = False,
     progress_matcher: AbstractProgressInfoMatcher | None = None,
 ) -> Generator[tuple[Pool, list[Output]], None, None]:

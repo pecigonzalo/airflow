@@ -17,11 +17,14 @@
 # under the License.
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 from airflow.models.baseoperator import BaseOperator
-from airflow.utils.context import Context
 from airflow.utils.email import send_email
+
+if TYPE_CHECKING:
+    from airflow.sdk.definitions.context import Context
 
 
 class EmailOperator(BaseOperator):

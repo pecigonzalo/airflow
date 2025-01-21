@@ -21,11 +21,11 @@
 ## Airflow Flower Service Component
 #################################
 {{- if .Values.flower.enabled }}
-{{- if or (eq .Values.executor "CeleryExecutor") (eq .Values.executor "CeleryKubernetesExecutor") }}
+{{- if or (contains "CeleryExecutor" .Values.executor) (contains "CeleryKubernetesExecutor" .Values.executor) }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-flower
+  name: {{ include "airflow.fullname" . }}-flower
   labels:
     tier: airflow
     component: flower

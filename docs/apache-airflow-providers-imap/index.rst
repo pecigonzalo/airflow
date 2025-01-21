@@ -19,17 +19,27 @@
 ``apache-airflow-providers-imap``
 =================================
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
+    Configuration <configurations-ref>
     Connection types <connections/imap>
     Python API <_api/airflow/providers/imap/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
@@ -40,42 +50,41 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-imap
+apache-airflow-providers-imap package
 ------------------------------------------------------
 
 `Internet Message Access Protocol (IMAP) <https://tools.ietf.org/html/rfc3501>`__
 
 
-Release: 3.2.1
+Release: 3.8.0
 
 Provider package
 ----------------
 
-This is a provider package for ``imap`` provider. All classes for this provider package
-are in ``airflow.providers.imap`` python package.
+This package is for the ``imap`` provider.
+All classes for this package are included in the ``airflow.providers.imap`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-imap``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-imap``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
 ==================  ==================
 PIP package         Version required
 ==================  ==================
-``apache-airflow``  ``>=2.4.0``
+``apache-airflow``  ``>=2.9.0``
 ==================  ==================
-
-.. include:: ../../airflow/providers/imap/CHANGELOG.rst

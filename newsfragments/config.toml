@@ -16,8 +16,9 @@
 # under the License.
 [tool.towncrier]
 name = "Airflow"
-filename = "../RELEASE_NOTES.rst"
+filename = "RELEASE_NOTES.rst"
 underlines = ["-", '^']
+ignore = ["config.toml"]
 
 [[tool.towncrier.type]]
 directory = "significant"

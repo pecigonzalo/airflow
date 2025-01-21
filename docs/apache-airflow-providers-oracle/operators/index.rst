@@ -22,20 +22,6 @@ Oracle Operators
 ================
 The Oracle connection type provides connection to a Oracle database.
 
-Execute SQL in an Oracle database
----------------------------------
-
-To execute arbitrary SQL in an Oracle database, use the
-:class:`~airflow.providers.oracle.operators.oracle.OracleOperator`.
-
-An example of executing a simple query is as follows:
-
-.. exampleinclude:: /../../airflow/providers/oracle/example_dags/example_oracle.py
-    :language: python
-    :start-after: [START howto_oracle_operator]
-    :end-before: [END howto_oracle_operator]
-
-
 Execute a Stored Procedure in an Oracle database
 ------------------------------------------------
 
@@ -58,7 +44,7 @@ a single integer argument, val_out. This can be represented with the following
 call using :class:`~airflow.providers.oracle.operators.oracle.OracleStoredProcedureOperator`
 with parameters passed positionally as a list:
 
-.. exampleinclude:: /../../airflow/providers/oracle/example_dags/example_oracle.py
+.. exampleinclude:: /../../providers/src/airflow/providers/oracle/example_dags/example_oracle.py
     :language: python
     :start-after: [START howto_oracle_stored_procedure_operator_with_list_inout]
     :end-before: [END howto_oracle_stored_procedure_operator_with_list_inout]
@@ -67,7 +53,7 @@ with parameters passed positionally as a list:
 Alternatively, parameters can be passed as keyword arguments using a dictionary
 as well.
 
-.. exampleinclude:: /../../airflow/providers/oracle/example_dags/example_oracle.py
+.. exampleinclude:: /../../providers/src/airflow/providers/oracle/example_dags/example_oracle.py
     :language: python
     :start-after: [START howto_oracle_stored_procedure_operator_with_dict_inout]
     :end-before: [END howto_oracle_stored_procedure_operator_with_dict_inout]

@@ -27,7 +27,7 @@ This operator can be used to copy data from one BigQuery table to another.
 Prerequisite Tasks
 ^^^^^^^^^^^^^^^^^^
 
-.. include::/operators/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 .. _howto/operator:BigQueryToBigQueryOperator:
 
@@ -50,7 +50,7 @@ Copying BigQuery tables
 
 The following Operator copies data from one or more BigQuery tables to another.
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/bigquery/example_bigquery_to_bigquery.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/bigquery/example_bigquery_to_bigquery.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_bigquery_to_bigquery]

@@ -23,7 +23,6 @@ import os
 import sys
 from argparse import Namespace
 from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -36,14 +35,17 @@ from airflow.models.log import Log
 from airflow.utils import cli, cli_action_loggers, timezone
 from airflow.utils.cli import _search_for_dag_file
 
+# Mark entire module as db_test because ``action_cli`` wrapper still could use DB on callbacks:
+# - ``cli_action_loggers.on_pre_execution``
+# - ``cli_action_loggers.on_post_execution``
+pytestmark = pytest.mark.db_test
 repo_root = Path(airflow.__file__).parent.parent
 
 
 class TestCliUtil:
     def test_metrics_build(self):
         func_name = "test"
-        exec_date = timezone.utcnow()
-        namespace = Namespace(dag_id="foo", task_id="bar", subcommand="test", execution_date=exec_date)
+        namespace = Namespace(dag_id="foo", task_id="bar", subcommand="test")
         metrics = cli._build_metrics(func_name, namespace)
 
         expected = {
@@ -51,12 +53,11 @@ class TestCliUtil:
             "sub_command": "test",
             "dag_id": "foo",
             "task_id": "bar",
-            "execution_date": exec_date,
         }
         for k, v in expected.items():
             assert v == metrics.get(k)
 
-        assert metrics.get("start_datetime") <= datetime.utcnow()
+        assert metrics.get("start_datetime") <= timezone.utcnow()
         assert metrics.get("full_command")
 
     def test_fail_function(self):
@@ -80,11 +81,8 @@ class TestCliUtil:
         assert os.path.join(settings.DAGS_FOLDER, "abc") == cli.process_subdir("DAGS_FOLDER/abc")
 
     def test_get_dags(self):
-        dags = cli.get_dags(None, "example_subdag_operator")
+        dags = cli.get_dags(None, "example_bash_operator")
         assert len(dags) == 1
-
-        dags = cli.get_dags(None, "subdag", True)
-        assert len(dags) > 1
 
         with pytest.raises(AirflowException):
             cli.get_dags(None, "foobar", True)
@@ -132,12 +130,13 @@ class TestCliUtil:
         expected_command = expected_masked_command.split()
 
         exec_date = timezone.utcnow()
-        namespace = Namespace(dag_id="foo", task_id="bar", subcommand="test", execution_date=exec_date)
-        with mock.patch.object(sys, "argv", args), mock.patch(
-            "airflow.utils.session.create_session"
-        ) as mock_create_session:
+        namespace = Namespace(dag_id="foo", task_id="bar", subcommand="test", logical_date=exec_date)
+        with (
+            mock.patch.object(sys, "argv", args),
+            mock.patch("airflow.utils.session.create_session") as mock_create_session,
+        ):
             metrics = cli._build_metrics(args[1], namespace)
-            # Make it so the default_action_log doesn't actually commit the txn, by giving it a nexted txn
+            # Make it so the default_action_log doesn't actually commit the txn, by giving it a next txn
             # instead
             mock_create_session.return_value = session.begin_nested()
             mock_create_session.return_value.bulk_insert_mappings = session.bulk_insert_mappings
@@ -145,7 +144,7 @@ class TestCliUtil:
 
             log = session.query(Log).order_by(Log.dttm.desc()).first()
 
-        assert metrics.get("start_datetime") <= datetime.utcnow()
+        assert metrics.get("start_datetime") <= timezone.utcnow()
 
         command: str = json.loads(log.extra).get("full_command")
         # Replace single quotes to double quotes to avoid json decode error
@@ -168,6 +167,48 @@ class TestCliUtil:
         default_pid_path = os.path.join(settings.AIRFLOW_HOME, f"airflow-{process_name}.pid")
         pid, _, _, _ = cli.setup_locations(process=process_name)
         assert pid == default_pid_path
+
+    @pytest.mark.parametrize(
+        ["given_command", "expected_masked_command"],
+        [
+            (
+                "airflow variables set --description 'needed for dag 4' client_secret_234 7fh4375f5gy353wdf",
+                "airflow variables set --description 'needed for dag 4' client_secret_234 ********",
+            ),
+            (
+                "airflow variables set cust_secret_234 7fh4375f5gy353wdf",
+                "airflow variables set cust_secret_234 ********",
+            ),
+        ],
+    )
+    def test_cli_set_variable_supplied_sensitive_value_is_masked(
+        self, given_command, expected_masked_command, session
+    ):
+        args = given_command.split()
+
+        expected_command = expected_masked_command.split()
+
+        exec_date = timezone.utcnow()
+        namespace = Namespace(dag_id="foo", task_id="bar", subcommand="test", execution_date=exec_date)
+        with (
+            mock.patch.object(sys, "argv", args),
+            mock.patch("airflow.utils.session.create_session") as mock_create_session,
+        ):
+            metrics = cli._build_metrics(args[1], namespace)
+            # Make it so the default_action_log doesn't actually commit the txn, by giving it a next txn
+            # instead
+            mock_create_session.return_value = session.begin_nested()
+            mock_create_session.return_value.bulk_insert_mappings = session.bulk_insert_mappings
+            cli_action_loggers.default_action_log(**metrics)
+
+            log = session.query(Log).order_by(Log.dttm.desc()).first()
+
+        assert metrics.get("start_datetime") <= timezone.utcnow()
+
+        command: str = json.loads(log.extra).get("full_command")
+        # Replace single quotes to double quotes to avoid json decode error
+        command = ast.literal_eval(command)
+        assert command == expected_command
 
 
 @contextmanager

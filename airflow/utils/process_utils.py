@@ -16,6 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """Utilities for running or stopping processes."""
+
 from __future__ import annotations
 
 import errno
@@ -34,8 +35,8 @@ if not IS_WINDOWS:
     import termios
     import tty
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 import psutil
 from lockfile.pidlockfile import PIDLockFile
@@ -94,7 +95,7 @@ def reap_process_group(
                     + [str(p.pid) for p in all_processes_in_the_group]
                 )
             elif err_killpg.errno == errno.ESRCH:
-                # There is a rare condition that the process has not managed yet to change it's process
+                # There is a rare condition that the process has not managed yet to change its process
                 # group. In this case os.killpg fails with ESRCH error
                 # So we additionally send a kill signal to the process itself.
                 logger.info(
@@ -119,7 +120,7 @@ def reap_process_group(
         all_processes_in_the_group = parent.children(recursive=True)
         all_processes_in_the_group.append(parent)
     except psutil.NoSuchProcess:
-        # The process already exited, but maybe it's children haven't.
+        # The process already exited, but maybe its children haven't.
         all_processes_in_the_group = []
         for proc in psutil.process_iter():
             try:
@@ -161,14 +162,17 @@ def reap_process_group(
     return returncodes
 
 
-def execute_in_subprocess(cmd: list[str], cwd: str | None = None) -> None:
+def execute_in_subprocess(cmd: list[str], cwd: str | None = None, env: dict | None = None) -> None:
     """
     Execute a process and stream output to logger.
 
     :param cmd: command and arguments to run
     :param cwd: Current working directory passed to the Popen constructor
+    :param env: Additional environment variables to set for the subprocess. If None,
+        the subprocess will inherit the current environment variables of the parent process
+        (``os.environ``)
     """
-    execute_in_subprocess_with_kwargs(cmd, cwd=cwd)
+    execute_in_subprocess_with_kwargs(cmd, cwd=cwd, env=env)
 
 
 def execute_in_subprocess_with_kwargs(cmd: list[str], **kwargs) -> None:
@@ -205,12 +209,12 @@ def execute_interactive(cmd: list[str], **kwargs) -> None:
     log.info("Executing cmd: %s", " ".join(shlex.quote(c) for c in cmd))
 
     old_tty = termios.tcgetattr(sys.stdin)
-    tty.setraw(sys.stdin.fileno())
+    old_sigint_handler = signal.getsignal(signal.SIGINT)
+    tty.setcbreak(sys.stdin.fileno())
 
     # open pseudo-terminal to interact with subprocess
     primary_fd, secondary_fd = pty.openpty()
     try:
-        # use os.setsid() make it run in a new process group, or bash job control will not be enabled
         with subprocess.Popen(
             cmd,
             stdin=secondary_fd,
@@ -219,8 +223,10 @@ def execute_interactive(cmd: list[str], **kwargs) -> None:
             universal_newlines=True,
             **kwargs,
         ) as proc:
+            # ignore SIGINT in the parent process
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
             while proc.poll() is None:
-                readable_fbs, _, _ = select.select([sys.stdin, primary_fd], [], [])
+                readable_fbs, _, _ = select.select([sys.stdin, primary_fd], [], [], 0)
                 if sys.stdin in readable_fbs:
                     input_data = os.read(sys.stdin.fileno(), 10240)
                     os.write(primary_fd, input_data)
@@ -230,6 +236,7 @@ def execute_interactive(cmd: list[str], **kwargs) -> None:
                         os.write(sys.stdout.fileno(), output_data)
     finally:
         # restore tty settings back
+        signal.signal(signal.SIGINT, old_sigint_handler)
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_tty)
 
 
@@ -284,7 +291,7 @@ def patch_environ(new_env_variables: dict[str, str]) -> Generator[None, None, No
     After leaving the context, it restores its original state.
     :param new_env_variables: Environment variables to set
     """
-    current_env_state = {key: os.environ.get(key) for key in new_env_variables.keys()}
+    current_env_state = {key: os.environ.get(key) for key in new_env_variables}
     os.environ.update(new_env_variables)
     try:
         yield
@@ -299,7 +306,8 @@ def patch_environ(new_env_variables: dict[str, str]) -> Generator[None, None, No
 
 def check_if_pidfile_process_is_running(pid_file: str, process_name: str):
     """
-    Checks if a pidfile already exists and process is still running.
+    Check if a pidfile already exists and process is still running.
+
     If process is dead then pidfile is removed.
 
     :param pid_file: path to the pidfile
@@ -324,7 +332,8 @@ def check_if_pidfile_process_is_running(pid_file: str, process_name: str):
 
 
 def set_new_process_group() -> None:
-    """Try to set current process to a new process group.
+    """
+    Try to set current process to a new process group.
 
     That makes it easy to kill all sub-process of this at the OS-level,
     rather than having to iterate the child processes.

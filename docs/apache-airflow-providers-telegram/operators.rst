@@ -44,11 +44,11 @@ the connection metadata is structured as follows:
    * - Host: string
      - Chat ID of the Telegram group/chat
    * - Connection Type: string
-     - http as connection type
+     - telegram as connection type
 
 An example usage of the TelegramOperator is as follows:
 
-.. exampleinclude:: /../../tests/system/providers/telegram/example_telegram.py
+.. exampleinclude:: /../../providers/tests/system/telegram/example_telegram.py
     :language: python
     :start-after: [START howto_operator_telegram]
     :end-before: [END howto_operator_telegram]

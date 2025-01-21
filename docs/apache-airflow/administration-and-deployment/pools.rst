@@ -22,7 +22,7 @@ Pools
 
 Some systems can get overwhelmed when too many processes hit them at the same time. Airflow pools can be used to
 **limit the execution parallelism** on arbitrary sets of tasks. The list of pools is managed in the UI
-(``Menu -> Admin -> Pools``) by giving the pools a name and assigning it a number of worker slots.
+(``Menu -> Admin -> Pools``) by giving the pools a name and assigning it a number of worker slots. There you can also decide whether the pool should include :doc:`deferred tasks </authoring-and-scheduling/deferring>` in its calculation of occupied slots.
 
 Tasks can then be associated with one of the existing pools by using the ``pool`` parameter when creating tasks:
 
@@ -83,8 +83,3 @@ for the heavy task to complete before they are executed. Here, in terms of resou
 This implementation can prevent overwhelming system resources, which (in this example) could occur when a heavy and a light task are running concurrently.
 On the other hand, both light tasks can run concurrently since they only occupy one pool slot each, while the heavy task would have to wait for two pool
 slots to become available before getting executed.
-
-.. warning::
-
-    Pools and SubDAGs do not interact as you might first expect. SubDAGs will *not* honor any pool you set on them at
-    the top level; pools must be set on the tasks *inside* the SubDAG directly.

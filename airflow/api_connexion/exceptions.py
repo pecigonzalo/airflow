@@ -17,13 +17,15 @@
 from __future__ import annotations
 
 from http import HTTPStatus
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import flask
 import werkzeug
 from connexion import FlaskApi, ProblemException, problem
 
 from airflow.utils.docs import get_docs_url
+
+if TYPE_CHECKING:
+    import flask
 
 doc_link = get_docs_url("stable-rest-api-ref.html")
 
@@ -39,9 +41,8 @@ EXCEPTIONS_LINK_MAP = {
 
 
 def common_error_handler(exception: BaseException) -> flask.Response:
-    """Used to capture connexion exceptions and add link to the type field."""
+    """Use to capture connexion exceptions and add link to the type field."""
     if isinstance(exception, ProblemException):
-
         link = EXCEPTIONS_LINK_MAP.get(exception.status)
         if link:
             response = problem(
@@ -152,8 +153,8 @@ class PermissionDenied(ProblemException):
         )
 
 
-class AlreadyExists(ProblemException):
-    """Raise when the object already exists."""
+class Conflict(ProblemException):
+    """Raise when there is some conflict."""
 
     def __init__(
         self,
@@ -170,6 +171,10 @@ class AlreadyExists(ProblemException):
             headers=headers,
             **kwargs,
         )
+
+
+class AlreadyExists(Conflict):
+    """Raise when the object already exists."""
 
 
 class Unknown(ProblemException):

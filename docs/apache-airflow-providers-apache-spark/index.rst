@@ -18,17 +18,27 @@
 ``apache-airflow-providers-apache-spark``
 =========================================
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Guides
 
-    Connection types <connections/spark>
+    Connection types <connections/index>
+    Decorators <decorators/pyspark>
     Operators <operators>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
@@ -36,15 +46,17 @@ Content
 
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
-    System Tests <_api/tests/system/providers/apache/spark/index>
+    System Tests <_api/tests/system/apache/spark/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
-    Example DAGs <https://github.com/apache/airflow/tree/providers-apache-spark/|version|/tests/system/providers/apache/spark>
+    Example DAGs <https://github.com/apache/airflow/tree/providers-apache-spark/|version|/providers/tests/system/apache/spark>
     PyPI Repository <https://pypi.org/project/apache-airflow-providers-apache-spark/>
     Installing from sources <installing-providers-from-sources>
 
@@ -52,43 +64,72 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-apache-spark
+apache-airflow-providers-apache-spark package
 ------------------------------------------------------
 
 `Apache Spark <https://spark.apache.org/>`__
 
 
-Release: 4.1.0
+Release: 5.0.0
 
 Provider package
 ----------------
 
-This is a provider package for ``apache.spark`` provider. All classes for this provider package
-are in ``airflow.providers.apache.spark`` python package.
+This package is for the ``apache.spark`` provider.
+All classes for this package are included in the ``airflow.providers.apache.spark`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-apache-spark``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-apache-spark``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
 ==================  ==================
 PIP package         Version required
 ==================  ==================
-``apache-airflow``  ``>=2.4.0``
-``pyspark``
+``apache-airflow``  ``>=2.9.0``
+``pyspark``         ``>=3.1.3``
+``grpcio-status``   ``>=1.59.0``
 ==================  ==================
 
-.. include:: ../../airflow/providers/apache/spark/CHANGELOG.rst
+Cross provider package dependencies
+-----------------------------------
+
+Those are dependencies that might be needed in order to use all the features of the package.
+You need to install the specified provider packages in order to use them.
+
+You can install such cross-provider dependencies when installing from PyPI. For example:
+
+.. code-block:: bash
+
+    pip install apache-airflow-providers-apache-spark[cncf.kubernetes]
+
+
+======================================================================================================================  ===================
+Dependent package                                                                                                       Extra
+======================================================================================================================  ===================
+`apache-airflow-providers-cncf-kubernetes <https://airflow.apache.org/docs/apache-airflow-providers-cncf-kubernetes>`_  ``cncf.kubernetes``
+`apache-airflow-providers-common-compat <https://airflow.apache.org/docs/apache-airflow-providers-common-compat>`_      ``common.compat``
+======================================================================================================================  ===================
+
+Downloading official packages
+-----------------------------
+
+You can download officially released packages and verify their checksums and signatures from the
+`Official Apache Download site <https://downloads.apache.org/airflow/providers/>`_
+
+* `The apache-airflow-providers-apache-spark 5.0.0 sdist package <https://downloads.apache.org/airflow/providers/apache_airflow_providers_apache_spark-5.0.0.tar.gz>`_ (`asc <https://downloads.apache.org/airflow/providers/apache_airflow_providers_apache_spark-5.0.0.tar.gz.asc>`__, `sha512 <https://downloads.apache.org/airflow/providers/apache_airflow_providers_apache_spark-5.0.0.tar.gz.sha512>`__)
+* `The apache-airflow-providers-apache-spark 5.0.0 wheel package <https://downloads.apache.org/airflow/providers/apache_airflow_providers_apache_spark-5.0.0-py3-none-any.whl>`_ (`asc <https://downloads.apache.org/airflow/providers/apache_airflow_providers_apache_spark-5.0.0-py3-none-any.whl.asc>`__, `sha512 <https://downloads.apache.org/airflow/providers/apache_airflow_providers_apache_spark-5.0.0-py3-none-any.whl.sha512>`__)

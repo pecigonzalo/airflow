@@ -19,26 +19,27 @@
 
 This example DAG generates greetings to a list of provided names in selected languages in the logs.
 """
+
 from __future__ import annotations
 
 import datetime
 from pathlib import Path
 
-from airflow import DAG
 from airflow.decorators import task
-from airflow.models.dagrun import DagRun
-from airflow.models.param import Param
-from airflow.models.taskinstance import TaskInstance
+from airflow.models.dag import DAG
+from airflow.models.param import Param, ParamsDict
 from airflow.utils.trigger_rule import TriggerRule
 
+# [START params_trigger]
 with DAG(
     dag_id=Path(__file__).stem,
-    description=__doc__[0 : __doc__.find(".")],
+    dag_display_name="Params Trigger UI",
+    description=__doc__.partition(".")[0],
     doc_md=__doc__,
     schedule=None,
     start_date=datetime.datetime(2022, 3, 4),
     catchup=False,
-    tags=["example_ui"],
+    tags=["example", "params"],
     params={
         "names": Param(
             ["Linda", "Martha", "Thomas"],
@@ -53,46 +54,44 @@ with DAG(
     },
 ) as dag:
 
-    @task(task_id="get_names")
+    @task(task_id="get_names", task_display_name="Get names")
     def get_names(**kwargs) -> list[str]:
-        ti: TaskInstance = kwargs["ti"]
-        dag_run: DagRun = ti.dag_run
-        if "names" not in dag_run.conf:
+        params: ParamsDict = kwargs["params"]
+        if "names" not in params:
             print("Uuups, no names given, was no UI used to trigger?")
             return []
-        return dag_run.conf["names"]
+        return params["names"]
 
-    @task.branch(task_id="select_languages")
+    @task.branch(task_id="select_languages", task_display_name="Select languages")
     def select_languages(**kwargs) -> list[str]:
-        ti: TaskInstance = kwargs["ti"]
-        dag_run: DagRun = ti.dag_run
+        params: ParamsDict = kwargs["params"]
         selected_languages = []
         for lang in ["english", "german", "french"]:
-            if lang in dag_run.conf and dag_run.conf[lang]:
+            if params[lang]:
                 selected_languages.append(f"generate_{lang}_greeting")
         return selected_languages
 
-    @task(task_id="generate_english_greeting")
+    @task(task_id="generate_english_greeting", task_display_name="Generate English greeting")
     def generate_english_greeting(name: str) -> str:
         return f"Hello {name}!"
 
-    @task(task_id="generate_german_greeting")
+    @task(task_id="generate_german_greeting", task_display_name="Erzeuge Deutsche Begrüßung")
     def generate_german_greeting(name: str) -> str:
         return f"Sehr geehrter Herr/Frau {name}."
 
-    @task(task_id="generate_french_greeting")
+    @task(task_id="generate_french_greeting", task_display_name="Produire un message d'accueil en français")
     def generate_french_greeting(name: str) -> str:
         return f"Bonjour {name}!"
 
-    @task(task_id="print_greetings", trigger_rule=TriggerRule.ALL_DONE)
+    @task(task_id="print_greetings", task_display_name="Print greetings", trigger_rule=TriggerRule.ALL_DONE)
     def print_greetings(greetings1, greetings2, greetings3) -> None:
-        for g in greetings1 if greetings1 else []:
+        for g in greetings1 or []:
             print(g)
-        for g in greetings2 if greetings2 else []:
+        for g in greetings2 or []:
             print(g)
-        for g in greetings3 if greetings3 else []:
+        for g in greetings3 or []:
             print(g)
-        if not greetings1 and not greetings2 and not greetings3:
+        if not (greetings1 or greetings2 or greetings3):
             print("sad, nobody to greet :-(")
 
     lang_select = select_languages()
@@ -102,3 +101,4 @@ with DAG(
     french_greetings = generate_french_greeting.expand(name=names)
     lang_select >> [english_greetings, german_greetings, french_greetings]
     results_print = print_greetings(english_greetings, german_greetings, french_greetings)
+# [END params_trigger]

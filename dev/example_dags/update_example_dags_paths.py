@@ -38,10 +38,10 @@ AIRFLOW_SOURCES_ROOT = Path(__file__).parents[3].resolve()
 
 
 EXAMPLE_DAGS_URL_MATCHER = re.compile(
-    r"^(.*)(https://github.com/apache/airflow/tree/(.*)/airflow/providers/(.*)/example_dags)(/?\".*)$"
+    r"^(.*)(https://github.com/apache/airflow/tree/(.*)/providers/src/airflow/providers/(.*)/example_dags)(/?\".*)$"
 )
 SYSTEM_TESTS_URL_MATCHER = re.compile(
-    r"^(.*)(https://github.com/apache/airflow/tree/(.*)/tests/system/providers/(.*))(/?\".*)$"
+    r"^(.*)(https://github.com/apache/airflow/tree/(.*)/providers/tests/system/(.*))(/?\".*)$"
 )
 
 
@@ -67,11 +67,11 @@ def replace_match(file: str, line: str, provider: str, version: str) -> str | No
                 continue
             system_tests_url = (
                 f"https://github.com/apache/airflow/tree/providers-{provider}/{version}"
-                f"/tests/system/providers/{url_path_to_dir}"
+                f"/providers/tests/system/{url_path_to_dir}"
             )
             example_dags_url = (
                 f"https://github.com/apache/airflow/tree/providers-{provider}/{version}"
-                f"/airflow/providers/{url_path_to_dir}/example_dags"
+                f"/providers/src/airflow/providers/{url_path_to_dir}/example_dags"
             )
             if check_if_url_exists(system_tests_url) and index == 1:
                 new_line = re.sub(matcher, r"\1" + system_tests_url + r"\5", line)
@@ -93,7 +93,7 @@ def replace_match(file: str, line: str, provider: str, version: str) -> str | No
 def find_matches(_file: Path, provider: str, version: str):
     lines = _file.read_text().splitlines(keepends=True)
     new_lines = []
-    for index, line in enumerate(lines):
+    for line in lines:
         new_line = replace_match(str(_file), line, provider, version)
         if new_line:
             new_lines.append(new_line)
@@ -102,19 +102,17 @@ def find_matches(_file: Path, provider: str, version: str):
 
 if __name__ == "__main__":
     curdir: Path = Path(os.curdir).resolve()
-    dirs: list[Path] = list(filter(os.path.isdir, curdir.iterdir()))
+    dirs: list[Path] = [p for p in curdir.iterdir() if p.is_dir()]
     with Progress(console=console) as progress:
         task = progress.add_task(f"Updating {len(dirs)}", total=len(dirs))
         for directory in dirs:
             if directory.name.startswith("apache-airflow-providers-"):
                 provider = directory.name[len("apache-airflow-providers-") :]
                 console.print(f"[bright_blue] Processing {directory}")
-                version_dirs = list(filter(os.path.isdir, directory.iterdir()))
-                for version_dir in version_dirs:
-                    version = version_dir.name
-                    console.print(version)
-                    for file in version_dir.rglob("*.html"):
-                        candidate_file = file
-                        if candidate_file.exists():
-                            find_matches(candidate_file, provider, version)
+                for version_dir in directory.iterdir():
+                    if version_dir.is_dir():
+                        console.print(version_dir.name)
+                        for candidate_file in version_dir.rglob("*.html"):
+                            if candidate_file.exists():
+                                find_matches(candidate_file, provider, version_dir.name)
             progress.advance(task)

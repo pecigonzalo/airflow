@@ -18,10 +18,18 @@
 ``apache-airflow-providers-apache-cassandra``
 =============================================
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Guides
 
@@ -29,6 +37,7 @@ Content
     Operators <operators>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
@@ -36,15 +45,17 @@ Content
 
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
-    System Tests <_api/tests/system/providers/apache/cassandra/index>
+    System Tests <_api/tests/system/apache/cassandra/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
-    Example DAGs <https://github.com/apache/airflow/tree/providers-apache-cassandra/|version|/tests/system/providers/apache/cassandra>
+    Example DAGs <https://github.com/apache/airflow/tree/providers-apache-cassandra/|version|/providers/tests/system/apache/cassandra>
     PyPI Repository <https://pypi.org/project/apache-airflow-providers-apache-cassandra/>
     Installing from sources <installing-providers-from-sources>
 
@@ -52,43 +63,42 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-apache-cassandra
+apache-airflow-providers-apache-cassandra package
 ------------------------------------------------------
 
-`Apache Cassandra <http://cassandra.apache.org/>`__.
+`Apache Cassandra <https://cassandra.apache.org/>`__.
 
 
-Release: 3.2.0
+Release: 3.7.0
 
 Provider package
 ----------------
 
-This is a provider package for ``apache.cassandra`` provider. All classes for this provider package
-are in ``airflow.providers.apache.cassandra`` python package.
+This package is for the ``apache.cassandra`` provider.
+All classes for this package are included in the ``airflow.providers.apache.cassandra`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-apache-cassandra``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-apache-cassandra``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
 ====================  ==================
 PIP package           Version required
 ====================  ==================
-``apache-airflow``    ``>=2.4.0``
-``cassandra-driver``  ``>=3.13.0``
+``apache-airflow``    ``>=2.9.0``
+``cassandra-driver``  ``>=3.29.1``
 ====================  ==================
-
-.. include:: ../../airflow/providers/apache/cassandra/CHANGELOG.rst

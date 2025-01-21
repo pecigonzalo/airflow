@@ -18,16 +18,18 @@
  */
 
 import React from "react";
-import { Box, Text, Flex } from "@chakra-ui/react";
+import { Box, useTheme } from "@chakra-ui/react";
 import { Handle, NodeProps, Position } from "reactflow";
+import { TbLogicAnd, TbLogicOr } from "react-icons/tb";
 
-import { SimpleStatus } from "src/dag/StatusBox";
-import useSelection from "src/dag/useSelection";
-import type { DagRun, Task, TaskInstance } from "src/types";
-import { getGroupAndMapSummary, hoverDelay } from "src/utils";
+import type { DepNode, DagRun, Task, TaskInstance } from "src/types";
+import type { AssetEvent } from "src/types/api-generated";
+
 import Tooltip from "src/components/Tooltip";
-import InstanceTooltip from "src/dag/InstanceTooltip";
 import { useContainerRef } from "src/context/containerRef";
+import { hoverDelay } from "src/utils";
+import AssetNode from "./AssetNode";
+import DagNode from "./DagNode";
 
 export interface CustomNodeProps {
   label: string;
@@ -42,161 +44,75 @@ export interface CustomNodeProps {
   onToggleCollapse: () => void;
   isOpen?: boolean;
   isActive?: boolean;
+  setupTeardownType?: "setup" | "teardown";
+  labelStyle?: string;
+  style?: string;
+  isZoomedOut: boolean;
+  class: DepNode["value"]["class"];
+  assetEvent?: AssetEvent;
 }
 
-export const BaseNode = ({
-  id,
-  data: {
-    label,
-    childCount,
-    height,
-    width,
-    instance,
-    task,
-    isSelected,
-    latestDagRunId,
-    onToggleCollapse,
-    isOpen,
-    isActive,
-  },
-}: NodeProps<CustomNodeProps>) => {
-  const { onSelect } = useSelection();
+const Node = (props: NodeProps<CustomNodeProps>) => {
+  const { colors } = useTheme();
+  const { data } = props;
   const containerRef = useContainerRef();
 
-  if (!task) return null;
-
-  const { isMapped } = task;
-  const mappedStates = instance?.mappedStates;
-
-  const { totalTasks } = getGroupAndMapSummary({ group: task, mappedStates });
-
-  const taskName = isMapped
-    ? `${label} [${instance ? totalTasks : " "}]`
-    : label;
-
-  const bg = isOpen ? "blackAlpha.50" : "white";
-
-  return (
-    <Tooltip
-      label={
-        instance && task ? (
-          <InstanceTooltip instance={instance} group={task} />
-        ) : null
-      }
-      portalProps={{ containerRef }}
-      hasArrow
-      placement="top"
-      openDelay={hoverDelay}
-    >
-      <Box
-        borderRadius={5}
-        borderWidth={1}
-        borderColor={isSelected ? "blue.400" : "gray.400"}
-        bg={isSelected ? "blue.50" : bg}
-        height={`${height}px`}
-        width={`${width}px`}
-        cursor={latestDagRunId ? "cursor" : "default"}
-        opacity={isActive ? 1 : 0.3}
-        transition="opacity 0.2s"
-        data-testid="node"
-        onClick={() => {
-          if (latestDagRunId) {
-            onSelect({
-              runId: instance?.runId || latestDagRunId,
-              taskId: isSelected ? undefined : id,
-            });
-          }
-        }}
-      >
-        <Flex
-          justifyContent="space-between"
-          width={width}
-          p={2}
-          flexWrap="wrap"
-        >
-          <Flex flexDirection="column">
-            <Text noOfLines={1} maxWidth={`calc(${width}px - 8px)`}>
-              {taskName}
-            </Text>
-            {!!instance && instance.state && (
-              <Flex alignItems="center">
-                <SimpleStatus state={instance.state} />
-                <Text ml={2} color="gray.500" fontSize="sm">
-                  {instance.state}
-                </Text>
-              </Flex>
-            )}
-            {task?.operator && (
-              <Text color="gray.500" fontWeight={400} fontSize="md">
-                {task.operator}
-              </Text>
-            )}
-          </Flex>
-          {!!childCount && (
-            <Text
-              color="blue.600"
-              cursor="pointer"
-              // Increase the target area to expand/collapse a group
-              p={3}
-              m={-3}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleCollapse();
-              }}
-            >
-              {isOpen ? "- " : "+ "}
-              {childCount} tasks
-            </Text>
-          )}
-        </Flex>
-      </Box>
-    </Tooltip>
-  );
-};
-
-const Node = (props: NodeProps<CustomNodeProps>) => {
-  const {
-    data: { height, width, isJoinNode, task },
-  } = props;
-  if (isJoinNode) {
+  if (data.isJoinNode) {
     return (
-      <>
-        <Handle
-          type="target"
-          position={Position.Top}
-          style={{ visibility: "hidden" }}
-        />
-        <Box
-          height={`${height}px`}
-          width={`${width}px`}
-          borderRadius={width}
-          bg="gray.400"
-        />
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          style={{ visibility: "hidden" }}
-        />
-      </>
+      <Box
+        height={`${data.height}px`}
+        width={`${data.width}px`}
+        borderRadius={data.width}
+        bg="gray.400"
+      />
     );
   }
 
-  if (!task) return null;
-  return (
-    <>
-      <Handle
-        type="target"
-        position={Position.Top}
-        style={{ visibility: "hidden" }}
-      />
-      <BaseNode {...props} />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        style={{ visibility: "hidden" }}
-      />
-    </>
-  );
+  if (data.class === "or-gate" || data.class === "and-gate") {
+    return (
+      <Box
+        height={`${data.height}px`}
+        width={`${data.width}px`}
+        borderRadius={4}
+        borderWidth={1}
+      >
+        <Tooltip
+          label={data.class === "or-gate" ? "Or" : "And"}
+          portalProps={{ containerRef }}
+          hasArrow
+          openDelay={hoverDelay}
+        >
+          <Box>
+            {data.class === "or-gate" ? (
+              <TbLogicOr size="30px" stroke={colors.gray[600]} />
+            ) : (
+              <TbLogicAnd size="30px" stroke={colors.gray[600]} />
+            )}
+          </Box>
+        </Tooltip>
+      </Box>
+    );
+  }
+
+  if (data.class === "asset") return <AssetNode {...props} />;
+
+  return <DagNode {...props} />;
 };
 
-export default Node;
+const NodeWrapper = (props: NodeProps<CustomNodeProps>) => (
+  <>
+    <Handle
+      type="target"
+      position={Position.Top}
+      style={{ visibility: "hidden" }}
+    />
+    <Node {...props} />
+    <Handle
+      type="source"
+      position={Position.Bottom}
+      style={{ visibility: "hidden" }}
+    />
+  </>
+);
+
+export default NodeWrapper;

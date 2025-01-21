@@ -20,17 +20,19 @@ from __future__ import annotations
 import collections.abc
 import logging
 import os
-import re
 import smtplib
-import warnings
+import ssl
+from collections.abc import Iterable
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
-from typing import Any, Iterable
+from typing import Any
+
+import re2
 
 from airflow.configuration import conf
-from airflow.exceptions import AirflowConfigException, AirflowException, RemovedInAirflow3Warning
+from airflow.exceptions import AirflowException
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +109,8 @@ def send_email_smtp(
     custom_headers: dict[str, Any] | None = None,
     **kwargs,
 ) -> None:
-    """Send an email with html content.
+    """
+    Send an email with html content.
 
     :param to: Recipient email address or list of addresses.
     :param subject: Email subject.
@@ -123,7 +126,7 @@ def send_email_smtp(
     :param custom_headers: Dictionary of custom headers to include in the email.
     :param kwargs: Additional keyword arguments.
 
-    >>> send_email('test@example.com', 'foo', '<b>Foo</b> bar', ['/dev/null'], dryrun=True)
+    >>> send_email("test@example.com", "foo", "<b>Foo</b> bar", ["/dev/null"], dryrun=True)
     """
     smtp_mail_from = conf.get("smtp", "SMTP_MAIL_FROM")
 
@@ -131,7 +134,7 @@ def send_email_smtp(
         mail_from = smtp_mail_from
     else:
         if from_email is None:
-            raise Exception(
+            raise ValueError(
                 "You should set from email - either by smtp/smtp_mail_from config or `from_email` parameter"
             )
         mail_from = from_email
@@ -184,7 +187,8 @@ def build_mime_message(
 
     msg = MIMEMultipart(mime_subtype)
     msg["Subject"] = subject
-    msg["From"] = mail_from
+    if mail_from:
+        msg["From"] = mail_from
     msg["To"] = ", ".join(to)
     recipients = to
     if cc:
@@ -251,17 +255,7 @@ def send_mime_email(
         except AirflowException:
             pass
     if smtp_user is None or smtp_password is None:
-        warnings.warn(
-            "Fetching SMTP credentials from configuration variables will be deprecated in a future "
-            "release. Please set credentials using a connection instead.",
-            RemovedInAirflow3Warning,
-            stacklevel=2,
-        )
-        try:
-            smtp_user = conf.get("smtp", "SMTP_USER")
-            smtp_password = conf.get("smtp", "SMTP_PASSWORD")
-        except AirflowConfigException:
-            log.debug("No user/password found for SMTP, so logging in with no authentication.")
+        log.debug("No user/password found for SMTP, so logging in with no authentication.")
 
     if not dryrun:
         for attempt in range(1, smtp_retry_limit + 1):
@@ -269,23 +263,22 @@ def send_mime_email(
             try:
                 smtp_conn = _get_smtp_connection(smtp_host, smtp_port, smtp_timeout, smtp_ssl)
             except smtplib.SMTPServerDisconnected:
-                if attempt < smtp_retry_limit:
-                    continue
-                raise
-
-            if smtp_starttls:
-                smtp_conn.starttls()
-            if smtp_user and smtp_password:
-                smtp_conn.login(smtp_user, smtp_password)
-            log.info("Sent an alert email to %s", e_to)
-            smtp_conn.sendmail(e_from, e_to, mime_msg.as_string())
-            smtp_conn.quit()
-            break
+                if attempt == smtp_retry_limit:
+                    raise
+            else:
+                if smtp_starttls:
+                    smtp_conn.starttls()
+                if smtp_user and smtp_password:
+                    smtp_conn.login(smtp_user, smtp_password)
+                log.info("Sent an alert email to %s", e_to)
+                smtp_conn.sendmail(e_from, e_to, mime_msg.as_string())
+                smtp_conn.quit()
+                break
 
 
 def get_email_address_list(addresses: str | Iterable[str]) -> list[str]:
     """
-    Returns a list of email addresses from the provided input.
+    Return a list of email addresses from the provided input.
 
     :param addresses: A string or iterable of strings containing email addresses.
     :return: A list of email addresses.
@@ -303,7 +296,7 @@ def get_email_address_list(addresses: str | Iterable[str]) -> list[str]:
 
 def _get_smtp_connection(host: str, port: int, timeout: int, with_ssl: bool) -> smtplib.SMTP:
     """
-    Returns an SMTP connection to the specified host and port, with optional SSL encryption.
+    Return an SMTP connection to the specified host and port, with optional SSL encryption.
 
     :param host: The hostname or IP address of the SMTP server.
     :param port: The port number to connect to on the SMTP server.
@@ -311,21 +304,31 @@ def _get_smtp_connection(host: str, port: int, timeout: int, with_ssl: bool) -> 
     :param with_ssl: Whether to use SSL encryption for the connection.
     :return: An SMTP connection to the specified host and port.
     """
-    return (
-        smtplib.SMTP_SSL(host=host, port=port, timeout=timeout)
-        if with_ssl
-        else smtplib.SMTP(host=host, port=port, timeout=timeout)
-    )
+    if not with_ssl:
+        return smtplib.SMTP(host=host, port=port, timeout=timeout)
+    else:
+        ssl_context_string = conf.get("email", "SSL_CONTEXT")
+        if ssl_context_string == "default":
+            ssl_context = ssl.create_default_context()
+        elif ssl_context_string == "none":
+            ssl_context = None
+        else:
+            raise RuntimeError(
+                f"The email.ssl_context configuration variable must "
+                f"be set to 'default' or 'none' and is '{ssl_context_string}."
+            )
+        return smtplib.SMTP_SSL(host=host, port=port, timeout=timeout, context=ssl_context)
 
 
 def _get_email_list_from_str(addresses: str) -> list[str]:
     """
-    Extract a list of email addresses from a string. The string
-    can contain multiple email addresses separated by
-    any of the following delimiters: ',' or ';'.
+    Extract a list of email addresses from a string.
+
+    The string can contain multiple email addresses separated
+    by any of the following delimiters: ',' or ';'.
 
     :param addresses: A string containing one or more email addresses.
     :return: A list of email addresses.
     """
     pattern = r"\s*[,;]\s*"
-    return [address for address in re.split(pattern, addresses)]
+    return re2.split(pattern, addresses)

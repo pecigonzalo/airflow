@@ -17,63 +17,50 @@
 # under the License.
 from __future__ import annotations
 
-import json  # noqa
-import time  # noqa
-import uuid  # noqa
-from datetime import datetime, timedelta
-from random import random  # noqa
-from typing import Any
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
-import dateutil  # noqa
-from pendulum import DateTime
+import dateutil  # noqa: F401
+from babel import Locale
+from babel.dates import LC_TIME, format_datetime
 
-import airflow.utils.yaml as yaml  # noqa
-from airflow.utils.deprecation_tools import add_deprecated_classes
+import airflow.utils.yaml as yaml  # noqa: F401
+from airflow.sdk.definitions.macros import ds_add, ds_format, json, time, uuid  # noqa: F401
 
-__deprecated_classes = {
-    "hive": {
-        "closest_ds_partition": "airflow.providers.apache.hive.macros.hive.closest_ds_partition",
-        "max_partition": "airflow.providers.apache.hive.macros.hive.max_partition",
-    },
-}
-
-add_deprecated_classes(__deprecated_classes, __name__)
+if TYPE_CHECKING:
+    from pendulum import DateTime
 
 
-def ds_add(ds: str, days: int) -> str:
+def ds_format_locale(
+    ds: str, input_format: str, output_format: str, locale: Locale | str | None = None
+) -> str:
     """
-    Add or subtract days from a YYYY-MM-DD.
+    Output localized datetime string in a given Babel format.
 
-    :param ds: anchor date in ``YYYY-MM-DD`` format to add to
-    :param days: number of days to add to the ds, you can use negative values
+    :param ds: Input string which contains a date.
+    :param input_format: Input string format (e.g., '%Y-%m-%d').
+    :param output_format: Output string Babel format (e.g., `yyyy-MM-dd`).
+    :param locale: Locale used to format the output string (e.g., 'en_US').
+                   If locale not specified, default LC_TIME will be used and if that's also not available,
+                   'en_US' will be used.
 
-    >>> ds_add('2015-01-01', 5)
-    '2015-01-06'
-    >>> ds_add('2015-01-06', -5)
-    '2015-01-01'
-    """
-    if not days:
-        return str(ds)
-    dt = datetime.strptime(str(ds), "%Y-%m-%d") + timedelta(days=days)
-    return dt.strftime("%Y-%m-%d")
-
-
-def ds_format(ds: str, input_format: str, output_format: str) -> str:
-    """
-    Output datetime string in a given format.
-
-    :param ds: input string which contains a date
-    :param input_format: input string format. E.g. %Y-%m-%d
-    :param output_format: output string format  E.g. %Y-%m-%d
-
-    >>> ds_format('2015-01-01', "%Y-%m-%d", "%m-%d-%y")
+    >>> ds_format("2015-01-01", "%Y-%m-%d", "MM-dd-yy")
     '01-01-15'
-    >>> ds_format('1/5/2015', "%m/%d/%Y",  "%Y-%m-%d")
+    >>> ds_format("1/5/2015", "%m/%d/%Y", "yyyy-MM-dd")
     '2015-01-05'
+    >>> ds_format("12/07/2024", "%d/%m/%Y", "EEEE dd MMMM yyyy", "en_US")
+    'Friday 12 July 2024'
+
+    .. versionadded:: 2.10.0
     """
-    return datetime.strptime(str(ds), input_format).strftime(output_format)
+    return format_datetime(
+        datetime.strptime(str(ds), input_format),
+        format=output_format,
+        locale=locale or LC_TIME or Locale("en_US"),
+    )
 
 
+# TODO: Task SDK: Move this to the Task SDK once we evaluate "pendulum"'s dependency
 def datetime_diff_for_humans(dt: Any, since: DateTime | None = None) -> str:
     """
     Return a human-readable/approximate difference between datetimes.

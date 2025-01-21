@@ -40,8 +40,10 @@ Create an EMR Serverless Application
 
 You can use :class:`~airflow.providers.amazon.aws.operators.emr.EmrServerlessCreateApplicationOperator` to
 create a new EMR Serverless Application.
+This operator can be run in deferrable mode by passing ``deferrable=True`` as a parameter. This requires
+the aiobotocore module to be installed.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_emr_serverless.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_emr_serverless.py
    :language: python
    :dedent: 4
    :start-after: [START howto_operator_emr_serverless_create_application]
@@ -54,8 +56,10 @@ Start an EMR Serverless Job
 
 You can use :class:`~airflow.providers.amazon.aws.operators.emr.EmrServerlessStartJobOperator` to
 start an EMR Serverless Job.
+This operator can be run in deferrable mode by passing ``deferrable=True`` as a parameter. This requires
+the aiobotocore module to be installed.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_emr_serverless.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_emr_serverless.py
    :language: python
    :dedent: 4
    :start-after: [START howto_operator_emr_serverless_start_job]
@@ -63,13 +67,33 @@ start an EMR Serverless Job.
 
 .. _howto/operator:EmrServerlessStopApplicationOperator:
 
+Open Application UIs
+""""""""""""""""""""
+
+The operator can also be configured to generate one-time links to the application UIs and Spark stdout logs
+by passing the ``enable_application_ui_links=True`` as a parameter. Once the job starts running, these links
+are available in the Details section of the relevant Task. If ``enable_application_ui_links=False`` then the
+links will be present but grayed out.
+
+You need to ensure you have the following IAM permissions to generate the dashboard link.
+
+.. code-block::
+
+        "emr-serverless:GetDashboardForJobRun"
+
+If Amazon S3 or Amazon CloudWatch logs are
+`enabled for EMR Serverless <https://docs.aws.amazon.com/emr/latest/EMR-Serverless-UserGuide/logging.html>`__,
+links to the respective console will also be available in the task logs and task Details.
+
 Stop an EMR Serverless Application
 ==================================
 
 You can use :class:`~airflow.providers.amazon.aws.operators.emr.EmrServerlessStopApplicationOperator` to
 stop an EMR Serverless Application.
+This operator can be run in deferrable mode by passing ``deferrable=True`` as a parameter. This requires
+the aiobotocore module to be installed.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_emr_serverless.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_emr_serverless.py
    :language: python
    :dedent: 4
    :start-after: [START howto_operator_emr_serverless_stop_application]
@@ -82,8 +106,10 @@ Delete an EMR Serverless Application
 
 You can use :class:`~airflow.providers.amazon.aws.operators.emr.EmrServerlessDeleteApplicationOperator` to
 delete an EMR Serverless Application.
+This operator can be run in deferrable mode by passing ``deferrable=True`` as a parameter. This requires
+the aiobotocore module to be installed.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_emr_serverless.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_emr_serverless.py
    :language: python
    :dedent: 4
    :start-after: [START howto_operator_emr_serverless_delete_application]
@@ -100,7 +126,7 @@ Wait on an EMR Serverless Job state
 To monitor the state of an EMR Serverless Job you can use
 :class:`~airflow.providers.amazon.aws.sensors.emr.EmrServerlessJobSensor`.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_emr_serverless.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_emr_serverless.py
    :language: python
    :dedent: 4
    :start-after: [START howto_sensor_emr_serverless_job]
@@ -114,7 +140,7 @@ Wait on an EMR Serverless Application state
 To monitor the state of an EMR Serverless Application you can use
 :class:`~airflow.providers.amazon.aws.sensors.emr.EmrServerlessApplicationSensor`.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_emr_serverless.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_emr_serverless.py
    :language: python
    :dedent: 4
    :start-after: [START howto_sensor_emr_serverless_application]

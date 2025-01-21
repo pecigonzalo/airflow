@@ -17,22 +17,18 @@
 # under the License.
 from __future__ import annotations
 
+from fastapi import FastAPI
 from flask import Blueprint
 from flask_appbuilder import BaseView as AppBuilderBaseView, expose
 
-from airflow.executors.base_executor import BaseExecutor
-
-# Importing base classes that we need to derive
-from airflow.hooks.base import BaseHook
-from airflow.models.baseoperator import BaseOperator
-
 # This is the class you derive to create a plugin
 from airflow.plugins_manager import AirflowPlugin
-from airflow.sensors.base import BaseSensorOperator
-from airflow.ti_deps.deps.base_ti_dep import BaseTIDep
+from airflow.task.priority_strategy import PriorityWeightStrategy
 from airflow.timetables.interval import CronDataIntervalTimetable
+
 from tests.listeners import empty_listener
-from tests.test_utils.mock_operators import (
+from tests.listeners.class_listener import ClassBasedListener
+from tests_common.test_utils.mock_operators import (
     AirflowLink,
     AirflowLink2,
     CustomBaseIndexOpLink,
@@ -40,26 +36,6 @@ from tests.test_utils.mock_operators import (
     GithubLink,
     GoogleLink,
 )
-
-
-# Will show up under airflow.hooks.test_plugin.PluginHook
-class PluginHook(BaseHook):
-    pass
-
-
-# Will show up under airflow.operators.test_plugin.PluginOperator
-class PluginOperator(BaseOperator):
-    pass
-
-
-# Will show up under airflow.sensors.test_plugin.PluginSensorOperator
-class PluginSensorOperator(BaseSensorOperator):
-    pass
-
-
-# Will show up under airflow.executors.test_plugin.PluginExecutor
-class PluginExecutor(BaseExecutor):
-    pass
 
 
 # Will show up under airflow.macros.test_plugin.plugin_macro
@@ -77,7 +53,12 @@ class PluginTestAppBuilderBaseView(AppBuilderBaseView):
 
 
 v_appbuilder_view = PluginTestAppBuilderBaseView()
-v_appbuilder_package = {"name": "Test View", "category": "Test Plugin", "view": v_appbuilder_view}
+v_appbuilder_package = {
+    "name": "Test View",
+    "category": "Test Plugin",
+    "view": v_appbuilder_view,
+    "label": "Test Label",
+}
 
 v_nomenu_appbuilder_package = {"view": v_appbuilder_view}
 
@@ -102,25 +83,28 @@ bp = Blueprint(
     static_url_path="/static/test_plugin",
 )
 
+app = FastAPI()
+
+
+app_with_metadata = {"app": app, "url_prefix": "/some_prefix", "name": "Name of the App"}
+
 
 # Extend an existing class to avoid the need to implement the full interface
 class CustomCronDataIntervalTimetable(CronDataIntervalTimetable):
     pass
 
 
-class CustomTestTriggerRule(BaseTIDep):
-    pass
+class CustomPriorityWeightStrategy(PriorityWeightStrategy):
+    def get_weight(self, ti):
+        return 1
 
 
 # Defining the plugin class
 class AirflowTestPlugin(AirflowPlugin):
     name = "test_plugin"
-    operators = [PluginOperator]
-    sensors = [PluginSensorOperator]
-    hooks = [PluginHook]
-    executors = [PluginExecutor]
     macros = [plugin_macro]
     flask_blueprints = [bp]
+    fastapi_apps = [app_with_metadata]
     appbuilder_views = [v_appbuilder_package]
     appbuilder_menu_items = [appbuilder_mitem, appbuilder_mitem_toplevel]
     global_operator_extra_links = [
@@ -129,8 +113,8 @@ class AirflowTestPlugin(AirflowPlugin):
     ]
     operator_extra_links = [GoogleLink(), AirflowLink2(), CustomOpLink(), CustomBaseIndexOpLink(1)]
     timetables = [CustomCronDataIntervalTimetable]
-    listeners = [empty_listener]
-    ti_deps = [CustomTestTriggerRule()]
+    listeners = [empty_listener, ClassBasedListener()]
+    priority_weight_strategies = [CustomPriorityWeightStrategy]
 
 
 class MockPluginA(AirflowPlugin):

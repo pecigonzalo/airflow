@@ -94,7 +94,6 @@ class TestValidJson:
         self.form_mock = mock.MagicMock(spec_set=dict)
 
     def _validate(self, message=None):
-
         validator = validators.ValidJson(message=message)
 
         return validator(self.form_mock, self.form_field_mock)
@@ -152,6 +151,17 @@ class TestValidKey:
 
         with pytest.raises(
             validators.ValidationError,
-            match=r"The key has to be less than [0-9]+ characters",
+            match=r"The key: [x]+ has to be less than [0-9]+ characters",
         ):
             self._validate()
+
+
+class TestReadOnly:
+    def setup_method(self):
+        self.form_read_only_field_mock = mock.MagicMock(data="readOnlyField")
+        self.form_mock = mock.MagicMock(spec_set=dict)
+
+    def test_read_only_validator(self):
+        validator = validators.ReadOnly()
+        assert validator(self.form_mock, self.form_read_only_field_mock) is None
+        assert self.form_read_only_field_mock.flags.readonly is True

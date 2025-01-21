@@ -38,13 +38,14 @@ You can do it in one of those ways:
 The next chapter has a general description of how Python loads packages and modules, and dives
 deeper into the specifics of each of the three possibilities above.
 
+
 How package/modules loading in Python works
 -------------------------------------------
 
 The list of directories from which Python tries to load the module is given
 by the variable ``sys.path``. Python really tries to
 `intelligently determine the contents <https://stackoverflow.com/a/38403654>`_
-of this variable, including depending on the operating system and how Python
+of this variable, depending on the operating system and how Python
 is installed and which Python version is used.
 
 You can check the contents of this variable for the current Python environment
@@ -56,10 +57,10 @@ by running an interactive terminal as in the example below:
     >>> from pprint import pprint
     >>> pprint(sys.path)
     ['',
-     '/home/arch/.pyenv/versions/3.8.4/lib/python37.zip',
-     '/home/arch/.pyenv/versions/3.8.4/lib/python3.8',
-     '/home/arch/.pyenv/versions/3.8.4/lib/python3.8/lib-dynload',
-     '/home/arch/venvs/airflow/lib/python3.8/site-packages']
+     '/home/arch/.pyenv/versions/3.9.4/lib/python37.zip',
+     '/home/arch/.pyenv/versions/3.9.4/lib/python3.9',
+     '/home/arch/.pyenv/versions/3.9.4/lib/python3.9/lib-dynload',
+     '/home/arch/venvs/airflow/lib/python3.9/site-packages']
 
 ``sys.path`` is initialized during program startup. The first precedence is
 given to the current directory, i.e, ``path[0]`` is the directory containing
@@ -124,14 +125,7 @@ for the paths that should be ignored. You do not need to have that file in any o
 In the example above the DAGs are only in ``my_custom_dags`` folder, the ``common_package`` should not be
 scanned by scheduler when searching for DAGS, so we should ignore ``common_package`` folder. You also
 want to ignore the ``base_dag.py`` if you keep a base DAG there that ``my_dag1.py`` and ``my_dag2.py`` derives
-from. Your ``.airflowignore`` should look then like this:
-
-.. code-block:: none
-
-   my_company/common_package/.*
-   my_company/my_custom_dags/base_dag\.py
-
-If ``DAG_IGNORE_FILE_SYNTAX`` is set to ``glob``, the equivalent ``.airflowignore`` file would be:
+from. Your ``.airflowignore`` should look then like this (using the default ``glob`` syntax):
 
 .. code-block:: none
 
@@ -159,13 +153,32 @@ Airflow, when running dynamically adds three directories to the ``sys.path``:
    as safe because they are part of configuration of the Airflow installation and controlled by the
    people managing the installation.
 
-Best practices for module loading
----------------------------------
+Best practices for your code naming
+-----------------------------------
 
 There are a few gotchas you should be careful about when you import your code.
 
+Sometimes, you might see exceptions that ``module 'X' has no attribute 'Y'`` raised from Airflow or other
+library code that you use. This is usually caused by the fact that you have a module or packaged named 'X'
+in your ``PYTHONPATH`` at the top level and it is imported instead of the module that the original
+code expects.
+
+You should always use unique names for your packages and modules and there are ways how you can make
+sure that uniqueness is enforced described below.
+
+
 Use unique top package name
 ...........................
+
+Most importantly avoid using generic names for anything that you add directly at the top level of your
+``PYTHONPATH``. For example if you add ``airflow`` folder with ``__init__.py`` to your ``DAGS_FOLDER``,
+it will clash with the Airflow package and you will not be able to import anything from Airflow
+package. Similarly do not add ``airflow.py`` file directly there. Also common names used by standard
+library packages such as ``multiprocessing`` or ``logging`` etc. should not be used as top level - either
+as packages (i.e. folders with ``__init__.py``) or as modules (i.e. ``.py`` files).
+
+The same applies to ``config`` and ``plugins`` folders which are also at the ``PYTHONPATH`` and anything
+you add to your ``PYTHONPATH`` manually (see details in the following chapters).
 
 It is recommended that you always put your DAGs/common files in a subpackage which is unique to your
 deployment (``my_company`` in the example below). It is far too easy to use generic names for the
@@ -217,7 +230,7 @@ specified by this command may be as follows:
 
 .. code-block:: none
 
-    Python PATH: [/home/rootcss/venvs/airflow/bin:/usr/lib/python38.zip:/usr/lib/python3.8:/usr/lib/python3.8/lib-dynload:/home/rootcss/venvs/airflow/lib/python3.8/site-packages:/home/rootcss/airflow/dags:/home/rootcss/airflow/config:/home/rootcss/airflow/plugins]
+    Python PATH: [/home/rootcss/venvs/airflow/bin:/usr/lib/python38.zip:/usr/lib/python3.9:/usr/lib/python3.9/lib-dynload:/home/rootcss/venvs/airflow/lib/python3.9/site-packages:/home/rootcss/airflow/dags:/home/rootcss/airflow/config:/home/rootcss/airflow/plugins]
 
 Below is the sample output of the ``airflow info`` command:
 
@@ -232,7 +245,7 @@ Below is the sample output of the ``airflow info`` command:
     architecture    | x86_64
     uname           | uname_result(system='Linux', node='85cd7ab7018e', release='4.19.76-linuxkit', version='#1 SMP Tue May 26 11:42:35 UTC 2020', machine='x86_64', processor='')
     locale          | ('en_US', 'UTF-8')
-    python_version  | 3.8.6 (default, Nov 25 2020, 02:47:44)  [GCC 8.3.0]
+    python_version  | 3.9.6 (default, Nov 25 2020, 02:47:44)  [GCC 8.3.0]
     python_location | /usr/local/bin/python
 
     Tools info
@@ -248,8 +261,8 @@ Below is the sample output of the ``airflow info`` command:
     Paths info
     airflow_home    | /root/airflow
     system_path     | /usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    python_path     | /usr/local/bin:/opt/airflow:/files/plugins:/usr/local/lib/python38.zip:/usr/local/lib/python3.8:/usr/
-                    | local/lib/python3.8/lib-dynload:/usr/local/lib/python3.8/site-packages:/files/dags:/root/airflow/conf
+    python_path     | /usr/local/bin:/opt/airflow:/files/plugins:/usr/local/lib/python38.zip:/usr/local/lib/python3.9:/usr/
+                    | local/lib/python3.9/lib-dynload:/usr/local/lib/python3.9/site-packages:/files/dags:/root/airflow/conf
                     | ig:/root/airflow/plugins
     airflow_on_path | True
 
@@ -290,10 +303,10 @@ The ``sys.path`` variable will look like below:
     >>> pprint(sys.path)
     ['',
      '/home/arch/projects/airflow_operators'
-     '/home/arch/.pyenv/versions/3.8.4/lib/python37.zip',
-     '/home/arch/.pyenv/versions/3.8.4/lib/python3.8',
-     '/home/arch/.pyenv/versions/3.8.4/lib/python3.8/lib-dynload',
-     '/home/arch/venvs/airflow/lib/python3.8/site-packages']
+     '/home/arch/.pyenv/versions/3.9.4/lib/python37.zip',
+     '/home/arch/.pyenv/versions/3.9.4/lib/python3.9',
+     '/home/arch/.pyenv/versions/3.9.4/lib/python3.9/lib-dynload',
+     '/home/arch/venvs/airflow/lib/python3.9/site-packages']
 
 As we can see that our provided directory is now added to the path, let's
 try to import the package now:
@@ -316,7 +329,7 @@ value as shown below:
 
 .. code-block:: none
 
-    Python PATH: [/home/arch/venv/bin:/home/arch/projects/airflow_operators:/usr/lib/python38.zip:/usr/lib/python3.8:/usr/lib/python3.8/lib-dynload:/home/arch/venv/lib/python3.8/site-packages:/home/arch/airflow/dags:/home/arch/airflow/config:/home/arch/airflow/plugins]
+    Python PATH: [/home/arch/venv/bin:/home/arch/projects/airflow_operators:/usr/lib/python38.zip:/usr/lib/python3.9:/usr/lib/python3.9/lib-dynload:/home/arch/venv/lib/python3.9/site-packages:/home/arch/airflow/dags:/home/arch/airflow/config:/home/arch/airflow/plugins]
 
 Creating a package in Python
 ----------------------------
@@ -331,20 +344,12 @@ packages, so learning how to build your package is handy.
 
 Here is how to create your package:
 
-1. Before starting, install the following packages:
+1. Before starting, choose and install the build/packaging tool that you will use, ideally it should be
+PEP-621 compliant to be able to switch to a different tool easily.
+The popular choices are setuptools, poetry, hatch, flit.
 
-``setuptools``: setuptools is a package development process library designed
-for creating and distributing Python packages.
-
-``wheel``: The wheel package provides a bdist_wheel command for setuptools. It
-creates .whl file which is directly installable through the ``pip install``
-command. We can then upload the same file to `PyPI <pypi.org>`_.
-
-.. code-block:: bash
-
-    pip install --upgrade pip setuptools wheel
-
-2. Create the package directory - in our case, we will call it ``airflow_operators``.
+2. Decide when you create your own package. create the package directory - in our case,
+   we will call it ``airflow_operators``.
 
 .. code-block:: bash
 
@@ -358,42 +363,16 @@ command. We can then upload the same file to `PyPI <pypi.org>`_.
 
 When we import this package, it should print the above message.
 
-4. Create ``setup.py``:
+4. Create ``pyproject.toml`` and fill it with build tool configuration of your choice
+See `The pyproject.toml specification <https://packaging.python.org/en/latest/specifications/pyproject-toml/#pyproject-toml-spec>`__
 
-.. code-block:: python
-
-    import setuptools
-
-    setuptools.setup(
-        name="airflow_operators",
-        packages=setuptools.find_packages(),
-    )
-
-5. Build the wheel:
+5. Build your project using the tool of your choice. For example for hatch it can be:
 
 .. code-block:: bash
 
-    python setup.py bdist_wheel
+    hatch build -t wheel
 
-This will create a few directories in the project and the overall structure will
-look like following:
-
-.. code-block:: bash
-
-    .
-    ├── airflow_operators
-    │   ├── __init__.py
-    ├── airflow_operators.egg-info
-    │   ├── PKG-INFO
-    │   ├── SOURCES.txt
-    │   ├── dependency_links.txt
-    │   └── top_level.txt
-    ├── build
-    │   └── bdist.macosx-10.15-x86_64
-    ├── dist
-    │   └── airflow_operators-0.0.0-py3-none-any.whl
-    └── setup.py
-
+This will create .whl file in your ``dist`` folder
 
 6. Install the .whl file using pip:
 

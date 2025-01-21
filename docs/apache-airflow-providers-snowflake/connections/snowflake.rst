@@ -56,11 +56,14 @@ Extra (optional)
     * ``region``: Warehouse region.
     * ``warehouse``: Snowflake warehouse name.
     * ``role``: Snowflake role.
-    * ``authenticator``: To connect using OAuth set this parameter ``oath``.
+    * ``authenticator``: To connect using OAuth set this parameter ``oauth``.
+    * ``refresh_token``: Specify refresh_token for OAuth connection.
     * ``private_key_file``: Specify the path to the private key file.
     * ``private_key_content``: Specify the content of the private key file.
     * ``session_parameters``: Specify `session level parameters <https://docs.snowflake.com/en/user-guide/python-connector-example.html#setting-session-parameters>`_.
     * ``insecure_mode``: Turn off OCSP certificate checks. For details, see: `How To: Turn Off OCSP Checking in Snowflake Client Drivers - Snowflake Community <https://community.snowflake.com/s/article/How-to-turn-off-OCSP-checking-in-Snowflake-client-drivers>`_.
+    * ``host``: Target Snowflake hostname to connect to (e.g., for local testing with LocalStack).
+    * ``port``: Target Snowflake port to connect to (e.g., for local testing with LocalStack).
 
 URI format example
 ^^^^^^^^^^^^^^^^^^

@@ -19,10 +19,18 @@
 ``apache-airflow-providers-ftp``
 ================================
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
@@ -30,6 +38,7 @@ Content
     Python API <_api/airflow/providers/ftp/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Operators
 
@@ -37,64 +46,95 @@ Content
 
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
-    System Tests <_api/tests/system/providers/ftp/index>
+    System Tests <_api/tests/system/ftp/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
-    Example DAGs <https://github.com/apache/airflow/tree/providers-ftp/|version|/tests/system/providers/ftp/example_ftp.py>
+    Example DAGs <https://github.com/apache/airflow/blob/providers-ftp/|version|/providers/tests/system/ftp/example_ftp.py>
     PyPI Repository <https://pypi.org/project/apache-airflow-providers-ftp/>
     Installing from sources <installing-providers-from-sources>
 
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
-    System Tests <_api/tests/system/providers/ftp/index>
+    System Tests <_api/tests/system/ftp/index>
 
 .. THE REMAINDER OF THE FILE IS AUTOMATICALLY GENERATED. IT WILL BE OVERWRITTEN AT RELEASE TIME!
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-ftp
+apache-airflow-providers-ftp package
 ------------------------------------------------------
 
 `File Transfer Protocol (FTP) <https://tools.ietf.org/html/rfc114>`__
 
 
-Release: 3.4.1
+Release: 3.12.0
 
 Provider package
 ----------------
 
-This is a provider package for ``ftp`` provider. All classes for this provider package
-are in ``airflow.providers.ftp`` python package.
+This package is for the ``ftp`` provider.
+All classes for this package are included in the ``airflow.providers.ftp`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-ftp``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-ftp``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
 ==================  ==================
 PIP package         Version required
 ==================  ==================
-``apache-airflow``  ``>=2.4.0``
+``apache-airflow``  ``>=2.9.0``
 ==================  ==================
 
-.. include:: ../../airflow/providers/ftp/CHANGELOG.rst
+Cross provider package dependencies
+-----------------------------------
+
+Those are dependencies that might be needed in order to use all the features of the package.
+You need to install the specified provider packages in order to use them.
+
+You can install such cross-provider dependencies when installing from PyPI. For example:
+
+.. code-block:: bash
+
+    pip install apache-airflow-providers-ftp[common.compat]
+
+
+==================================================================================================================  =================
+Dependent package                                                                                                   Extra
+==================================================================================================================  =================
+`apache-airflow-providers-common-compat <https://airflow.apache.org/docs/apache-airflow-providers-common-compat>`_  ``common.compat``
+`apache-airflow-providers-openlineage <https://airflow.apache.org/docs/apache-airflow-providers-openlineage>`_      ``openlineage``
+==================================================================================================================  =================
+
+Downloading official packages
+-----------------------------
+
+You can download officially released packages and verify their checksums and signatures from the
+`Official Apache Download site <https://downloads.apache.org/airflow/providers/>`_
+
+* `The apache-airflow-providers-ftp 3.12.0 sdist package <https://downloads.apache.org/airflow/providers/apache_airflow_providers_ftp-3.12.0.tar.gz>`_ (`asc <https://downloads.apache.org/airflow/providers/apache_airflow_providers_ftp-3.12.0.tar.gz.asc>`__, `sha512 <https://downloads.apache.org/airflow/providers/apache_airflow_providers_ftp-3.12.0.tar.gz.sha512>`__)
+* `The apache-airflow-providers-ftp 3.12.0 wheel package <https://downloads.apache.org/airflow/providers/apache_airflow_providers_ftp-3.12.0-py3-none-any.whl>`_ (`asc <https://downloads.apache.org/airflow/providers/apache_airflow_providers_ftp-3.12.0-py3-none-any.whl.asc>`__, `sha512 <https://downloads.apache.org/airflow/providers/apache_airflow_providers_ftp-3.12.0-py3-none-any.whl.sha512>`__)

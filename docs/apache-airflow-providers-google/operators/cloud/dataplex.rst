@@ -31,7 +31,7 @@ For more information about the available fields to pass when creating a task, vi
 
 A simple task configuration can look as followed:
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 0
     :start-after: [START howto_dataplex_configuration]
@@ -40,13 +40,13 @@ A simple task configuration can look as followed:
 With this configuration we can create the task both synchronously & asynchronously:
 :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCreateTaskOperator`
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 4
     :start-after: [START howto_dataplex_create_task_operator]
     :end-before: [END howto_dataplex_create_task_operator]
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 4
     :start-after: [START howto_dataplex_async_create_task_operator]
@@ -59,7 +59,7 @@ To delete a task you can use:
 
 :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexDeleteTaskOperator`
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 4
     :start-after: [START howto_dataplex_delete_task_operator]
@@ -72,7 +72,7 @@ To list tasks you can use:
 
 :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexListTasksOperator`
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 4
     :start-after: [START howto_dataplex_list_tasks_operator]
@@ -85,7 +85,7 @@ To get a task you can use:
 
 :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexGetTaskOperator`
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 4
     :start-after: [START howto_dataplex_get_task_operator]
@@ -98,7 +98,7 @@ To wait for a task created asynchronously you can use:
 
 :class:`~airflow.providers.google.cloud.sensors.dataplex.DataplexTaskStateSensor`
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 4
     :start-after: [START howto_dataplex_task_state_sensor]
@@ -113,7 +113,7 @@ For more information about the available fields to pass when creating a lake, vi
 
 A simple task configuration can look as followed:
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 0
     :start-after: [START howto_dataplex_lake_configuration]
@@ -123,12 +123,11 @@ With this configuration we can create the lake:
 
 :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCreateLakeOperator`
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 4
     :start-after: [START howto_dataplex_create_lake_operator]
     :end-before: [END howto_dataplex_create_lake_operator]
-
 
 Delete a lake
 -------------
@@ -137,8 +136,462 @@ To delete a lake you can use:
 
 :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexDeleteLakeOperator`
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/dataplex/example_dataplex.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex.py
     :language: python
     :dedent: 4
     :start-after: [START howto_dataplex_delete_lake_operator]
     :end-before: [END howto_dataplex_delete_lake_operator]
+
+Create or update a Data Quality scan
+------------------------------------
+
+Before you create a Dataplex Data Quality scan you need to define its body.
+For more information about the available fields to pass when creating a Data Quality scan, visit `Dataplex create data quality API. <https://cloud.google.com/dataplex/docs/reference/rest/v1/projects.locations.dataScans#DataScan>`__
+
+A simple Data Quality scan configuration can look as followed:
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 0
+    :start-after: [START howto_dataplex_data_quality_configuration]
+    :end-before: [END howto_dataplex_data_quality_configuration]
+
+With this configuration we can create or update the Data Quality scan:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCreateOrUpdateDataQualityScanOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_create_data_quality_operator]
+    :end-before: [END howto_dataplex_create_data_quality_operator]
+
+Get a Data Quality scan
+-----------------------
+
+To get a Data Quality scan you can use:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexGetDataQualityScanOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_get_data_quality_operator]
+    :end-before: [END howto_dataplex_get_data_quality_operator]
+
+
+
+Delete a Data Quality scan
+--------------------------
+
+To delete a Data Quality scan you can use:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexDeleteDataQualityScanOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_delete_data_quality_operator]
+    :end-before: [END howto_dataplex_delete_data_quality_operator]
+
+Run a Data Quality scan
+-----------------------
+
+You can run Dataplex Data Quality scan in asynchronous modes to later check its status using sensor:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexRunDataQualityScanOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_run_data_quality_operator]
+    :end-before: [END howto_dataplex_run_data_quality_operator]
+
+To check that running Dataplex Data Quality scan succeeded you can use:
+
+:class:`~airflow.providers.google.cloud.sensors.dataplex.DataplexDataQualityJobStatusSensor`.
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_data_scan_job_state_sensor]
+    :end-before: [END howto_dataplex_data_scan_job_state_sensor]
+
+Also for this action you can use operator in the deferrable mode:
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_run_data_quality_def_operator]
+    :end-before: [END howto_dataplex_run_data_quality_def_operator]
+
+Get a Data Quality scan job
+---------------------------
+
+To get a Data Quality scan job you can use:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexGetDataQualityScanResultOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_get_data_quality_job_operator]
+    :end-before: [END howto_dataplex_get_data_quality_job_operator]
+
+Also for this action you can use operator in the deferrable mode:
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_get_data_quality_job_def_operator]
+    :end-before: [END howto_dataplex_get_data_quality_job_def_operator]
+
+Create a zone
+-------------
+
+Before you create a Dataplex zone you need to define its body.
+
+For more information about the available fields to pass when creating a zone, visit `Dataplex create zone API. <https://cloud.google.com/dataplex/docs/reference/rest/v1/projects.locations.lakes.zones#Zone>`__
+
+A simple zone configuration can look as followed:
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 0
+    :start-after: [START howto_dataplex_zone_configuration]
+    :end-before: [END howto_dataplex_zone_configuration]
+
+With this configuration we can create a zone:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCreateZoneOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_create_zone_operator]
+    :end-before: [END howto_dataplex_create_zone_operator]
+
+Delete a zone
+-------------
+
+To delete a zone you can use:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexDeleteZoneOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_delete_zone_operator]
+    :end-before: [END howto_dataplex_delete_zone_operator]
+
+Create an asset
+---------------
+
+Before you create a Dataplex asset you need to define its body.
+
+For more information about the available fields to pass when creating an asset, visit `Dataplex create asset API. <https://cloud.google.com/dataplex/docs/reference/rest/v1/projects.locations.lakes.zones.assets#Asset>`__
+
+A simple asset configuration can look as followed:
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 0
+    :start-after: [START howto_dataplex_asset_configuration]
+    :end-before: [END howto_dataplex_asset_configuration]
+
+With this configuration we can create the asset:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCreateAssetOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_create_asset_operator]
+    :end-before: [END howto_dataplex_create_asset_operator]
+
+Delete an asset
+---------------
+
+To delete an asset you can use:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexDeleteAssetOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dq.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_delete_asset_operator]
+    :end-before: [END howto_dataplex_delete_asset_operator]
+
+Create or update a Data Profile scan
+------------------------------------
+
+Before you create a Dataplex Data Profile scan you need to define its body.
+For more information about the available fields to pass when creating a Data Profile scan, visit `Dataplex create data profile API. <https://cloud.google.com/dataplex/docs/reference/rest/v1/projects.locations.dataScans#DataScan>`__
+
+A simple Data Profile scan configuration can look as followed:
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dp.py
+    :language: python
+    :dedent: 0
+    :start-after: [START howto_dataplex_data_profile_configuration]
+    :end-before: [END howto_dataplex_data_profile_configuration]
+
+With this configuration we can create or update the Data Profile scan:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCreateOrUpdateDataProfileScanOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dp.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_create_data_profile_operator]
+    :end-before: [END howto_dataplex_create_data_profile_operator]
+
+Get a Data Profile scan
+-----------------------
+
+To get a Data Profile scan you can use:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexGetDataProfileScanOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dp.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_get_data_profile_operator]
+    :end-before: [END howto_dataplex_get_data_profile_operator]
+
+
+
+Delete a Data Profile scan
+--------------------------
+
+To delete a Data Profile scan you can use:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexDeleteDataProfileScanOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dp.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_delete_data_profile_operator]
+    :end-before: [END howto_dataplex_delete_data_profile_operator]
+
+Run a Data Profile scan
+-----------------------
+
+You can run Dataplex Data Profile scan in asynchronous modes to later check its status using sensor:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexRunDataProfileScanOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dp.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_run_data_profile_operator]
+    :end-before: [END howto_dataplex_run_data_profile_operator]
+
+To check that running Dataplex Data Profile scan succeeded you can use:
+
+:class:`~airflow.providers.google.cloud.sensors.dataplex.DataplexDataProfileJobStatusSensor`.
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dp.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_data_scan_job_state_sensor]
+    :end-before: [END howto_dataplex_data_scan_job_state_sensor]
+
+Also for this action you can use operator in the deferrable mode:
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dp.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_run_data_profile_def_operator]
+    :end-before: [END howto_dataplex_run_data_profile_def_operator]
+
+Get a Data Profile scan job
+---------------------------
+
+To get a Data Profile scan job you can use:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexGetDataProfileScanResultOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_dp.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_dataplex_get_data_profile_job_operator]
+    :end-before: [END howto_dataplex_get_data_profile_job_operator]
+
+
+Google Dataplex Catalog Operators
+=================================
+
+Dataplex Catalog provides a unified inventory of Google Cloud resources, such as BigQuery, and other resources,
+such as on-premises resources. Dataplex Catalog automatically retrieves metadata for Google Cloud resources,
+and you bring metadata for third-party resources into Dataplex Catalog.
+
+For more information about Dataplex Catalog visit `Dataplex Catalog production documentation <Product documentation <https://cloud.google.com/dataplex/docs/catalog-overview>`__
+
+.. _howto/operator:DataplexCatalogCreateEntryGroupOperator:
+
+Create an EntryGroup
+--------------------
+
+To create an Entry Group in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogCreateEntryGroupOperator`
+For more information about the available fields to pass when creating an Entry Group, visit `Entry Group resource configuration. <https://cloud.google.com/dataplex/docs/reference/rest/v1/projects.locations.entryGroups#EntryGroup>`__
+
+A simple Entry Group configuration can look as followed:
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 0
+    :start-after: [START howto_dataplex_entry_group_configuration]
+    :end-before: [END howto_dataplex_entry_group_configuration]
+
+With this configuration you can create an Entry Group resource:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogCreateEntryGroupOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_create_entry_group]
+    :end-before: [END howto_operator_dataplex_catalog_create_entry_group]
+
+.. _howto/operator:DataplexCatalogDeleteEntryGroupOperator:
+
+Delete an EntryGroup
+--------------------
+
+To delete an Entry Group in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogDeleteEntryGroupOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_delete_entry_group]
+    :end-before: [END howto_operator_dataplex_catalog_delete_entry_group]
+
+.. _howto/operator:DataplexCatalogListEntryGroupsOperator:
+
+List EntryGroups
+----------------
+
+To list all Entry Groups in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogListEntryGroupsOperator`.
+This operator also supports filtering and ordering the result of the operation.
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_list_entry_groups]
+    :end-before: [END howto_operator_dataplex_catalog_list_entry_groups]
+
+.. _howto/operator:DataplexCatalogGetEntryGroupOperator:
+
+Get an EntryGroup
+-----------------
+
+To retrieve an Entry Group in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogGetEntryGroupOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_get_entry_group]
+    :end-before: [END howto_operator_dataplex_catalog_get_entry_group]
+
+.. _howto/operator:DataplexCatalogUpdateEntryGroupOperator:
+
+Update an EntryGroup
+--------------------
+
+To update an Entry Group in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogUpdateEntryGroupOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_update_entry_group]
+    :end-before: [END howto_operator_dataplex_catalog_update_entry_group]
+
+.. _howto/operator:DataplexCatalogCreateEntryTypeOperator:
+
+Create an EntryType
+--------------------
+
+To create an Entry Type in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogCreateEntryTypeOperator`
+For more information about the available fields to pass when creating an Entry Type, visit `Entry Type resource configuration. <https://cloud.google.com/dataplex/docs/reference/rest/v1/projects.locations.entryTypes#EntryType>`__
+
+A simple Entry Group configuration can look as followed:
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 0
+    :start-after: [START howto_dataplex_entry_type_configuration]
+    :end-before: [END howto_dataplex_entry_type_configuration]
+
+With this configuration you can create an Entry Type resource:
+
+:class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogCreateEntryTypeOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_create_entry_type]
+    :end-before: [END howto_operator_dataplex_catalog_create_entry_type]
+
+.. _howto/operator:DataplexCatalogDeleteEntryTypeOperator:
+
+Delete an EntryType
+--------------------
+
+To delete an Entry Type in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogDeleteEntryTypeOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_delete_entry_type]
+    :end-before: [END howto_operator_dataplex_catalog_delete_entry_type]
+
+.. _howto/operator:DataplexCatalogListEntryTypesOperator:
+
+List EntryTypes
+----------------
+
+To list all Entry Types in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogListEntryTypesOperator`.
+This operator also supports filtering and ordering the result of the operation.
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_list_entry_types]
+    :end-before: [END howto_operator_dataplex_catalog_list_entry_types]
+
+.. _howto/operator:DataplexCatalogGetEntryTypeOperator:
+
+Get an EntryType
+-----------------
+
+To retrieve an Entry Group in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogGetEntryTypeOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_get_entry_type]
+    :end-before: [END howto_operator_dataplex_catalog_get_entry_type]
+
+.. _howto/operator:DataplexCatalogUpdateEntryTypeOperator:
+
+Update an EntryType
+--------------------
+
+To update an Entry Type in specific location in Dataplex Catalog you can
+use :class:`~airflow.providers.google.cloud.operators.dataplex.DataplexCatalogUpdateEntryTypeOperator`
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/dataplex/example_dataplex_catalog.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dataplex_catalog_update_entry_type]
+    :end-before: [END howto_operator_dataplex_catalog_update_entry_type]

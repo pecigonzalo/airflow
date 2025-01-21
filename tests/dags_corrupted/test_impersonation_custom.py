@@ -17,9 +17,9 @@
 # under the License.
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# AIRFLOW-1893 - Originally, impersonation tests were incomplete missing the use case when
+# Originally, impersonation tests were incomplete missing the use case when
 # DAGs access custom packages usually made available through the PYTHONPATH environment
 # variable. This file includes a DAG that imports a custom package made available and if
 # run via the previous implementation of impersonation, will fail by not being able to
@@ -28,19 +28,19 @@ from datetime import datetime
 # variable correctly.
 from fake_datetime import FakeDatetime
 
-from airflow.models import DAG
-from airflow.operators.python import PythonOperator
+from airflow.models.dag import DAG
+from airflow.providers.standard.operators.python import PythonOperator
 
 DEFAULT_DATE = datetime(2016, 1, 1)
 
 args = {"owner": "airflow", "start_date": DEFAULT_DATE, "run_as_user": "airflow_test_user"}
 
-dag = DAG(dag_id="impersonation_with_custom_pkg", default_args=args)
+dag = DAG(dag_id="impersonation_with_custom_pkg", schedule=timedelta(days=1), default_args=args)
 
 
 def print_today():
     date_time = FakeDatetime.utcnow()
-    print(f"Today is {date_time.strftime('%Y-%m-%d')}")
+    print(f"Today is {date_time:%Y-%m-%d}")
 
 
 def check_hive_conf():

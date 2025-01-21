@@ -44,42 +44,6 @@ There are two possible terminal states for the DAG Run:
 
 DAGs that have a currently running DAG run can be shown on the UI dashboard in the "Running" tab. Similarly, DAGs whose latest DAG run is marked as failed can be found on the "Failed" tab.
 
-Cron Presets
-''''''''''''
-
-You may set your DAG to run on a simple schedule by setting its ``schedule`` argument to either a
-`cron expression <https://en.wikipedia.org/wiki/Cron#CRON_expression>`_, a ``datetime.timedelta`` object,
-or one of the following cron "presets". For more elaborate scheduling requirements, you can implement a :doc:`custom timetable <../authoring-and-scheduling/timetable>`
-
-.. tip::
-    You can use an online editor for CRON expressions such as `Crontab guru <https://crontab.guru/>`_
-
-+----------------+--------------------------------------------------------------------+-----------------+
-| preset         | meaning                                                            | cron            |
-+================+====================================================================+=================+
-| ``None``       | Don't schedule, use for exclusively "externally triggered" DAGs    |                 |
-+----------------+--------------------------------------------------------------------+-----------------+
-| ``@once``      | Schedule once and only once                                        |                 |
-+----------------+--------------------------------------------------------------------+-----------------+
-| ``@continuous``| Run as soon as the previous run finishes                           |                 |
-+----------------+--------------------------------------------------------------------+-----------------+
-| ``@hourly``    | Run once an hour at the end of the hour                            | ``0 * * * *``   |
-+----------------+--------------------------------------------------------------------+-----------------+
-| ``@daily``     | Run once a day at midnight (24:00)                                 | ``0 0 * * *``   |
-+----------------+--------------------------------------------------------------------+-----------------+
-| ``@weekly``    | Run once a week at midnight (24:00) on Sunday                      | ``0 0 * * 0``   |
-+----------------+--------------------------------------------------------------------+-----------------+
-| ``@monthly``   | Run once a month at midnight (24:00) of the first day of the month | ``0 0 1 * *``   |
-+----------------+--------------------------------------------------------------------+-----------------+
-| ``@quarterly`` | Run once a quarter at midnight (24:00) on the first day            | ``0 0 1 */3 *`` |
-+----------------+--------------------------------------------------------------------+-----------------+
-| ``@yearly``    | Run once a year at midnight (24:00) of January 1                   | ``0 0 1 1 *``   |
-+----------------+--------------------------------------------------------------------+-----------------+
-
-Your DAG will be instantiated for each schedule along with a corresponding
-DAG Run entry in the database backend.
-
-
 .. _data-interval:
 
 Data Interval
@@ -122,7 +86,7 @@ DAG run fails.
 Catchup
 -------
 
-An Airflow DAG defined with a ``start_date``, possibly an ``end_date``, and a non-dataset schedule, defines a series of intervals which the scheduler turns into individual DAG runs and executes.
+An Airflow DAG defined with a ``start_date``, possibly an ``end_date``, and a non-asset schedule, defines a series of intervals which the scheduler turns into individual DAG runs and executes.
 The scheduler, by default, will
 kick off a DAG Run for any data interval that has not been run since the last data interval (or has been cleared). This concept is called Catchup.
 
@@ -136,8 +100,9 @@ in the configuration file. When turned off, the scheduler creates a DAG run only
     Code that goes along with the Airflow tutorial located at:
     https://github.com/apache/airflow/blob/main/airflow/example_dags/tutorial.py
     """
+
     from airflow.models.dag import DAG
-    from airflow.operators.bash import BashOperator
+    from airflow.providers.standard.operators.bash import BashOperator
 
     import datetime
     import pendulum
@@ -161,40 +126,47 @@ with a data between 2016-01-01 and 2016-01-02, and the next one will be created
 just after midnight on the morning of 2016-01-03 with a data interval between
 2016-01-02 and 2016-01-03.
 
+Be aware that using a ``datetime.timedelta`` object as schedule can lead to a different behavior.
+In such a case, the single DAG Run created will cover data between 2016-01-01 06:00 and
+2016-01-02 06:00 (one schedule interval ending now). For a more detailed description of the
+differences between a cron and a delta based schedule, take a look at the
+:ref:`timetables comparison <Differences between the cron and delta data interval timetables>`
+
 If the ``dag.catchup`` value had been ``True`` instead, the scheduler would have created a DAG Run
 for each completed interval between 2015-12-01 and 2016-01-02 (but not yet one for 2016-01-02,
 as that interval hasn't completed) and the scheduler will execute them sequentially.
 
 Catchup is also triggered when you turn off a DAG for a specified period and then re-enable it.
 
-This behavior is great for atomic datasets that can easily be split into periods. Turning catchup off is great
+This behavior is great for atomic assets that can easily be split into periods. Turning catchup off is great
 if your DAG performs catchup internally.
 
 
 Backfill
 ---------
-There can be the case when you may want to run the DAG for a specified historical period e.g.,
-A data filling DAG is created with ``start_date`` **2019-11-21**, but another user requires the output data from a month ago i.e., **2019-10-21**.
+You may want to run the DAG for a specified historical period. For example,
+a DAG is created with ``start_date`` **2024-11-21**, but another user requires
+the output data from a month prior, i.e. **2024-10-21**.
 This process is known as Backfill.
 
-You may want to backfill the data even in the cases when catchup is disabled. This can be done through CLI.
-Run the below command
+This can be done through API or CLI. For CLI usage, run the command below:
 
 .. code-block:: bash
 
-    airflow dags backfill \
+    airflow backfill create --dag-id DAG_ID \
         --start-date START_DATE \
         --end-date END_DATE \
-        dag_id
 
-The `backfill command <../cli-and-env-variables-ref.html#backfill>`_ will re-run all the instances of the dag_id for all the intervals within the start date and end date.
+The `backfill command <../cli-and-env-variables-ref.html#backfill>`_ will
+re-run all the instances of the dag_id for all the intervals within the start
+date and end date.
 
 Re-run Tasks
 ------------
 Some of the tasks can fail during the scheduled run. Once you have fixed
 the errors after going through the logs, you can re-run the tasks by clearing them for the
-scheduled date. Clearing a task instance doesn't delete the task instance record.
-Instead, it updates ``max_tries`` to ``0`` and sets the current task instance state to ``None``, which causes the task to re-run.
+scheduled date. Clearing a task instance creates a record of the task instance.
+The ``try_number`` of the current task instance is incremented, the ``max_tries`` set to ``0`` and the state set to ``None``, which causes the task to re-run.
 
 Click on the failed task in the Tree or Graph views and then click on **Clear**.
 The executor will re-run it.
@@ -223,6 +195,23 @@ For more options, you can check the help of the `clear command <../cli-and-env-v
 .. code-block:: bash
 
     airflow tasks clear --help
+
+Task Instance History
+---------------------
+When a task instance retries or is cleared, the task instance history is preserved. You can see this history by clicking on the task instance in the Grid view.
+
+.. image:: ../img/task_instance_history.png
+
+.. note::
+    The try selector shown above is only available for tasks that have been retried or cleared.
+
+The history shows the value of the task instance attributes at the end of the particular run. On the log page, you can also see the logs for each of the task instance tries.
+This can be useful for debugging.
+
+.. image:: ../img/task_instance_history_log.png
+
+.. note::
+    Related task instance objects like the XComs, rendered template fields, etc., are not preserved in the history. Only the task instance attributes, including the logs, are preserved.
 
 External Triggers
 '''''''''''''''''
@@ -254,7 +243,7 @@ Example of a parameterized DAG:
     import pendulum
 
     from airflow import DAG
-    from airflow.operators.bash import BashOperator
+    from airflow.providers.standard.operators.bash import BashOperator
 
     dag = DAG(
         "example_parameterized_dag",
@@ -282,7 +271,15 @@ Using CLI
 Using UI
 ^^^^^^^^^^
 
+In the UI the parameters to trigger a DAG can be better represented via ``params`` definition as described in
+:ref:`concepts:params` documentation. Via defined params a proper form for value entry is rendered.
+
+If the DAG does not define ``params`` the form is usually skipped, via the configuration option ``show_trigger_form_if_no_params``
+it is possible to force the display the classic form of a dict-only entry to pass configuration options.
+
 .. image:: ../img/example_passing_conf.png
+
+Please consider to convert such usage to ``params`` as this is the more convenient way and allows also validation of user input.
 
 To Keep in Mind
 ''''''''''''''''

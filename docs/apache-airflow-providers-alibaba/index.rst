@@ -18,10 +18,18 @@
 ``apache-airflow-providers-alibaba``
 ====================================
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Guides
 
@@ -30,6 +38,7 @@ Content
     Logging for Tasks <logging/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
@@ -37,15 +46,17 @@ Content
 
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
-    System Tests <_api/tests/system/providers/alibaba/index>
+    System Tests <_api/tests/system/alibaba/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
-    Example DAGs <https://github.com/apache/airflow/tree/providers-alibaba/|version|/tests/system/providers/alibaba>
+    Example DAGs <https://github.com/apache/airflow/tree/providers-alibaba/|version|/providers/tests/system/alibaba>
     PyPI Repository <https://pypi.org/project/apache-airflow-providers-alibaba/>
     Installing from sources <installing-providers-from-sources>
 
@@ -53,43 +64,44 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-alibaba
+apache-airflow-providers-alibaba package
 ------------------------------------------------------
 
-Alibaba Cloud integration (including `Alibaba Cloud <https://www.alibabacloud.com//>`__).
+Alibaba Cloud integration (including `Alibaba Cloud <https://www.alibabacloud.com/>`__).
 
 
-Release: 2.4.0
+Release: 3.0.0
 
 Provider package
 ----------------
 
-This is a provider package for ``alibaba`` provider. All classes for this provider package
-are in ``airflow.providers.alibaba`` python package.
+This package is for the ``alibaba`` provider.
+All classes for this package are included in the ``airflow.providers.alibaba`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-alibaba``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-alibaba``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
-==================  ==================
-PIP package         Version required
-==================  ==================
-``apache-airflow``  ``>=2.4.0``
-``oss2``            ``>=2.14.0``
-==================  ==================
-
-.. include:: ../../airflow/providers/alibaba/CHANGELOG.rst
+============================  ==================
+PIP package                   Version required
+============================  ==================
+``apache-airflow``            ``>=2.9.0``
+``oss2``                      ``>=2.14.0``
+``alibabacloud_adb20211201``  ``>=1.0.0``
+``alibabacloud_tea_openapi``  ``>=0.3.7``
+============================  ==================

@@ -20,26 +20,27 @@ from __future__ import annotations
 import collections.abc
 import functools
 import operator
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Mapping, NamedTuple, Sequence, Sized, Union
+from collections.abc import Iterable, Mapping, Sequence, Sized
+from typing import TYPE_CHECKING, Any, NamedTuple, Union
 
 import attr
 
-from airflow.typing_compat import TypeGuard
-from airflow.utils.context import Context
-from airflow.utils.mixins import ResolveMixin
+from airflow.sdk.definitions._internal.mixins import ResolveMixin
 from airflow.utils.session import NEW_SESSION, provide_session
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-    from airflow.models.operator import Operator
     from airflow.models.xcom_arg import XComArg
+    from airflow.sdk.types import Operator
+    from airflow.serialization.serialized_objects import _ExpandInputRef
+    from airflow.typing_compat import TypeGuard
 
 ExpandInput = Union["DictOfListsExpandInput", "ListOfDictsExpandInput"]
 
 # Each keyword argument to expand() can be an XComArg, sequence, or dict (not
 # any mapping since we need the value to be ordered).
-OperatorExpandArgument = Union["MappedArgument", "XComArg", Sequence, Dict[str, Any]]
+OperatorExpandArgument = Union["MappedArgument", "XComArg", Sequence, dict[str, Any]]
 
 # The single argument of expand_kwargs() can be an XComArg, or a list with each
 # element being either an XComArg or a dict.
@@ -48,7 +49,8 @@ OperatorExpandKwargsArgument = Union["XComArg", Sequence[Union["XComArg", Mappin
 
 @attr.define(kw_only=True)
 class MappedArgument(ResolveMixin):
-    """Stand-in stub for task-group-mapping arguments.
+    """
+    Stand-in stub for task-group-mapping arguments.
 
     This is very similar to an XComArg, but resolved differently. Declared here
     (instead of in the task group module) to avoid import cycles.
@@ -57,17 +59,14 @@ class MappedArgument(ResolveMixin):
     _input: ExpandInput
     _key: str
 
-    def get_task_map_length(self, run_id: str, *, session: Session) -> int | None:
-        # TODO (AIP-42): Implement run-time task map length inspection. This is
-        # needed when we implement task mapping inside a mapped task group.
-        raise NotImplementedError()
-
     def iter_references(self) -> Iterable[tuple[Operator, str]]:
         yield from self._input.iter_references()
 
     @provide_session
-    def resolve(self, context: Context, *, session: Session = NEW_SESSION) -> Any:
-        data, _ = self._input.resolve(context, session=session)
+    def resolve(
+        self, context: Mapping[str, Any], *, include_xcom: bool = True, session: Session = NEW_SESSION
+    ) -> Any:
+        data, _ = self._input.resolve(context, session=session, include_xcom=include_xcom)
         return data[self._key]
 
 
@@ -93,7 +92,8 @@ def _needs_run_time_resolution(v: OperatorExpandArgument) -> TypeGuard[MappedArg
 
 
 class NotFullyPopulated(RuntimeError):
-    """Raise when ``get_map_lengths`` cannot populate all mapping metadata.
+    """
+    Raise when ``get_map_lengths`` cannot populate all mapping metadata.
 
     This is generally due to not all upstream tasks have finished when the
     function is called.
@@ -108,7 +108,8 @@ class NotFullyPopulated(RuntimeError):
 
 
 class DictOfListsExpandInput(NamedTuple):
-    """Storage type of a mapped operator's mapped kwargs.
+    """
+    Storage type of a mapped operator's mapped kwargs.
 
     This is created from ``expand(**kwargs)``.
     """
@@ -129,16 +130,21 @@ class DictOfListsExpandInput(NamedTuple):
         return functools.reduce(operator.mul, literal_values, 1)
 
     def _get_map_lengths(self, run_id: str, *, session: Session) -> dict[str, int]:
-        """Return dict of argument name to map length.
+        """
+        Return dict of argument name to map length.
 
         If any arguments are not known right now (upstream task not finished),
         they will not be present in the dict.
         """
+
         # TODO: This initiates one database call for each XComArg. Would it be
         # more efficient to do one single db call and unpack the value here?
         def _get_length(v: OperatorExpandArgument) -> int | None:
+            from airflow.models.xcom_arg import get_task_map_length
+
             if _needs_run_time_resolution(v):
-                return v.get_task_map_length(run_id, session=session)
+                return get_task_map_length(v, run_id, session=session)
+
             # Unfortunately a user-defined TypeGuard cannot apply negative type
             # narrowing. https://github.com/python/typing/discussions/1013
             if TYPE_CHECKING:
@@ -158,9 +164,15 @@ class DictOfListsExpandInput(NamedTuple):
         lengths = self._get_map_lengths(run_id, session=session)
         return functools.reduce(operator.mul, (lengths[name] for name in self.value), 1)
 
-    def _expand_mapped_field(self, key: str, value: Any, context: Context, *, session: Session) -> Any:
+    def _expand_mapped_field(
+        self, key: str, value: Any, context: Mapping[str, Any], *, session: Session, include_xcom: bool
+    ) -> Any:
         if _needs_run_time_resolution(value):
-            value = value.resolve(context, session=session)
+            value = (
+                value.resolve(context, session=session, include_xcom=include_xcom)
+                if include_xcom
+                else str(value)
+            )
         map_index = context["ti"].map_index
         if map_index < 0:
             raise RuntimeError("can't resolve task-mapping argument without expanding")
@@ -168,7 +180,7 @@ class DictOfListsExpandInput(NamedTuple):
 
         def _find_index_for_this_field(index: int) -> int:
             # Need to use the original user input to retain argument order.
-            for mapped_key in reversed(list(self.value)):
+            for mapped_key in reversed(self.value):
                 mapped_length = all_lengths[mapped_key]
                 if mapped_length < 1:
                     raise RuntimeError(f"cannot expand field mapped to length {mapped_length!r}")
@@ -196,8 +208,13 @@ class DictOfListsExpandInput(NamedTuple):
             if isinstance(x, XComArg):
                 yield from x.iter_references()
 
-    def resolve(self, context: Context, session: Session) -> tuple[Mapping[str, Any], set[int]]:
-        data = {k: self._expand_mapped_field(k, v, context, session=session) for k, v in self.value.items()}
+    def resolve(
+        self, context: Mapping[str, Any], session: Session, *, include_xcom: bool = True
+    ) -> tuple[Mapping[str, Any], set[int]]:
+        data = {
+            k: self._expand_mapped_field(k, v, context, session=session, include_xcom=include_xcom)
+            for k, v in self.value.items()
+        }
         literal_keys = {k for k, _ in self._iter_parse_time_resolved_kwargs()}
         resolved_oids = {id(v) for k, v in data.items() if k not in literal_keys}
         return data, resolved_oids
@@ -210,7 +227,8 @@ def _describe_type(value: Any) -> str:
 
 
 class ListOfDictsExpandInput(NamedTuple):
-    """Storage type of a mapped operator's mapped kwargs.
+    """
+    Storage type of a mapped operator's mapped kwargs.
 
     This is created from ``expand_kwargs(xcom_arg)``.
     """
@@ -223,9 +241,11 @@ class ListOfDictsExpandInput(NamedTuple):
         raise NotFullyPopulated({"expand_kwargs() argument"})
 
     def get_total_map_length(self, run_id: str, *, session: Session) -> int:
+        from airflow.models.xcom_arg import get_task_map_length
+
         if isinstance(self.value, collections.abc.Sized):
             return len(self.value)
-        length = self.value.get_task_map_length(run_id, session=session)
+        length = get_task_map_length(self.value, run_id, session=session)
         if length is None:
             raise NotFullyPopulated({"expand_kwargs() argument"})
         return length
@@ -240,7 +260,9 @@ class ListOfDictsExpandInput(NamedTuple):
                 if isinstance(x, XComArg):
                     yield from x.iter_references()
 
-    def resolve(self, context: Context, session: Session) -> tuple[Mapping[str, Any], set[int]]:
+    def resolve(
+        self, context: Mapping[str, Any], session: Session, *, include_xcom: bool = True
+    ) -> tuple[Mapping[str, Any], set[int]]:
         map_index = context["ti"].map_index
         if map_index < 0:
             raise RuntimeError("can't resolve task-mapping argument without expanding")
@@ -249,9 +271,9 @@ class ListOfDictsExpandInput(NamedTuple):
         if isinstance(self.value, collections.abc.Sized):
             mapping = self.value[map_index]
             if not isinstance(mapping, collections.abc.Mapping):
-                mapping = mapping.resolve(context, session)
-        else:
-            mappings = self.value.resolve(context, session)
+                mapping = mapping.resolve(context, session, include_xcom=include_xcom)
+        elif include_xcom:
+            mappings = self.value.resolve(context, session, include_xcom=include_xcom)
             if not isinstance(mappings, collections.abc.Sequence):
                 raise ValueError(f"expand_kwargs() expects a list[dict], not {_describe_type(mappings)}")
             mapping = mappings[map_index]
@@ -265,7 +287,10 @@ class ListOfDictsExpandInput(NamedTuple):
                     f"expand_kwargs() input dict keys must all be str, "
                     f"but {key!r} is of type {_describe_type(key)}"
                 )
-        return mapping, {id(v) for v in mapping.values()}
+        # filter out parse time resolved values from the resolved_oids
+        resolved_oids = {id(v) for k, v in mapping.items() if not _is_parse_time_mappable(v)}
+
+        return mapping, resolved_oids
 
 
 EXPAND_INPUT_EMPTY = DictOfListsExpandInput({})  # Sentinel value.
@@ -276,8 +301,12 @@ _EXPAND_INPUT_TYPES = {
 }
 
 
-def get_map_type_key(expand_input: ExpandInput) -> str:
-    return next(k for k, v in _EXPAND_INPUT_TYPES.items() if v == type(expand_input))
+def get_map_type_key(expand_input: ExpandInput | _ExpandInputRef) -> str:
+    from airflow.serialization.serialized_objects import _ExpandInputRef
+
+    if isinstance(expand_input, _ExpandInputRef):
+        return expand_input.key
+    return next(k for k, v in _EXPAND_INPUT_TYPES.items() if isinstance(expand_input, v))
 
 
 def create_expand_input(kind: str, value: Any) -> ExpandInput:

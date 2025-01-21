@@ -24,7 +24,7 @@ This page shows how to upload data from local filesystem to Google Drive.
 Prerequisite Tasks
 ^^^^^^^^^^^^^^^^^^
 
-.. include::/operators/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 .. _howto/operator:LocalFilesystemToGoogleDriveOperator:
 
@@ -38,7 +38,7 @@ When you use this operator, you can upload a list of files.
 
 Below is an example of using this operator to upload data from local filesystem to Google Drive.
 
-.. exampleinclude:: /../../tests/system/providers/google/suite/example_local_to_drive.py
+.. exampleinclude:: /../../providers/tests/system/google/suite/example_local_to_drive.py
     :language: python
     :dedent: 0
     :start-after: [START howto_operator_local_to_drive_upload_single_file]

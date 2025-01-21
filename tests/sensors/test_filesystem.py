@@ -20,13 +20,18 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from datetime import timedelta
 
 import pytest
 
-from airflow.exceptions import AirflowSensorTimeout
+from airflow.exceptions import AirflowSensorTimeout, TaskDeferred
 from airflow.models.dag import DAG
-from airflow.sensors.filesystem import FileSensor
+from airflow.providers.standard.sensors.filesystem import FileSensor
+from airflow.providers.standard.triggers.file import FileTrigger
 from airflow.utils.timezone import datetime
+
+pytestmark = pytest.mark.db_test
+
 
 TEST_DAG_ID = "unit_tests_file_sensor"
 DEFAULT_DATE = datetime(2015, 1, 1)
@@ -34,11 +39,11 @@ DEFAULT_DATE = datetime(2015, 1, 1)
 
 class TestFileSensor:
     def setup_method(self):
-        from airflow.hooks.filesystem import FSHook
+        from airflow.providers.standard.hooks.filesystem import FSHook
 
         hook = FSHook()
         args = {"owner": "airflow", "start_date": DEFAULT_DATE}
-        dag = DAG(TEST_DAG_ID + "test_schedule_dag_once", default_args=args)
+        dag = DAG(TEST_DAG_ID + "test_schedule_dag_once", schedule=timedelta(days=1), default_args=args)
         self.hook = hook
         self.dag = dag
 
@@ -200,12 +205,12 @@ class TestFileSensor:
             task.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
         shutil.rmtree(temp_dir)
 
-    def test_subdirectory_empty(self):
-        temp_dir = tempfile.mkdtemp()
-        tempfile.mkdtemp(dir=temp_dir)
+    def test_subdirectory_empty(self, tmp_path):
+        (tmp_path / "subdir").mkdir()
+
         task = FileSensor(
             task_id="test",
-            filepath=temp_dir,
+            filepath=tmp_path.as_posix(),
             fs_conn_id="fs_default",
             dag=self.dag,
             timeout=0,
@@ -215,4 +220,17 @@ class TestFileSensor:
 
         with pytest.raises(AirflowSensorTimeout):
             task.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
-            shutil.rmtree(temp_dir)
+
+    def test_task_defer(self):
+        task = FileSensor(
+            task_id="test",
+            filepath="temp_dir",
+            fs_conn_id="fs_default",
+            deferrable=True,
+            dag=self.dag,
+        )
+
+        with pytest.raises(TaskDeferred) as exc:
+            task.execute(None)
+
+        assert isinstance(exc.value.trigger, FileTrigger), "Trigger is not a FileTrigger"

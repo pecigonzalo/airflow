@@ -16,14 +16,15 @@
 # specific language governing permissions and limitations
 # under the License.
 """jsonschema for validating serialized DAG and operator."""
+
 from __future__ import annotations
 
 import pkgutil
-from typing import TYPE_CHECKING, Iterable
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Protocol
 
 from airflow.exceptions import AirflowException
 from airflow.settings import json
-from airflow.typing_compat import Protocol
 
 if TYPE_CHECKING:
     import jsonschema

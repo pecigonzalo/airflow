@@ -22,22 +22,23 @@ import datetime
 import importlib
 import time
 from threading import Thread
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import aiofiles
 import pendulum
 import pytest
 
-from airflow import DAG
 from airflow.config_templates import airflow_local_settings
 from airflow.jobs.job import Job
 from airflow.jobs.triggerer_job_runner import TriggererJobRunner, TriggerRunner, setup_queue_listener
 from airflow.logging_config import configure_logging
 from airflow.models import DagModel, DagRun, TaskInstance, Trigger
 from airflow.models.baseoperator import BaseOperator
+from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
+from airflow.providers.standard.triggers.temporal import DateTimeTrigger, TimeDeltaTrigger
 from airflow.triggers.base import TriggerEvent
-from airflow.triggers.temporal import TimeDeltaTrigger
 from airflow.triggers.testing import FailureTrigger, SuccessTrigger
 from airflow.utils import timezone
 from airflow.utils.log.logging_mixin import RedirectStdHandler
@@ -45,8 +46,12 @@ from airflow.utils.log.trigger_handler import LocalQueueHandler
 from airflow.utils.session import create_session
 from airflow.utils.state import State, TaskInstanceState
 from airflow.utils.types import DagRunType
+
 from tests.core.test_logging_config import reset_logging
-from tests.test_utils.db import clear_db_dags, clear_db_runs
+from tests_common.test_utils.db import clear_db_dags, clear_db_runs
+from tests_common.test_utils.log_handlers import non_pytest_handlers
+
+pytestmark = pytest.mark.db_test
 
 
 class TimeDeltaTrigger_(TimeDeltaTrigger):
@@ -56,8 +61,8 @@ class TimeDeltaTrigger_(TimeDeltaTrigger):
         self.delta = delta
 
     async def run(self):
-        with open(self.filename, "a") as f:
-            f.write("hi\n")
+        async with aiofiles.open(self.filename, mode="a") as f:
+            await f.write("hi\n")
         async for event in super().run():
             yield event
 
@@ -87,11 +92,11 @@ def session():
 
 def create_trigger_in_db(session, trigger, operator=None):
     dag_model = DagModel(dag_id="test_dag")
-    dag = DAG(dag_id=dag_model.dag_id, start_date=pendulum.datetime(2023, 1, 1))
+    dag = DAG(dag_id=dag_model.dag_id, schedule="@daily", start_date=pendulum.datetime(2023, 1, 1))
     run = DagRun(
         dag_id=dag_model.dag_id,
         run_id="test_run",
-        execution_date=pendulum.datetime(2023, 1, 1),
+        logical_date=pendulum.datetime(2023, 1, 1),
         run_type=DagRunType.MANUAL,
     )
     trigger_orm = Trigger.from_object(trigger)
@@ -100,7 +105,7 @@ def create_trigger_in_db(session, trigger, operator=None):
         operator.dag = dag
     else:
         operator = BaseOperator(task_id="test_ti", dag=dag)
-    task_instance = TaskInstance(operator, execution_date=run.execution_date, run_id=run.run_id)
+    task_instance = TaskInstance(operator, run_id=run.run_id)
     task_instance.trigger_id = trigger_orm.id
     session.add(dag_model)
     session.add(run)
@@ -110,7 +115,7 @@ def create_trigger_in_db(session, trigger, operator=None):
     return dag_model, run, trigger_orm, task_instance
 
 
-def test_trigger_logging_sensitive_info(session, capsys):
+def test_trigger_logging_sensitive_info(session, caplog):
     """
     Checks that when a trigger fires, it doesn't log any sensitive
     information from arguments
@@ -143,13 +148,14 @@ def test_trigger_logging_sensitive_info(session, capsys):
     finally:
         # We always have to stop the runner
         triggerer_job_runner.trigger_runner.stop = True
+        triggerer_job_runner.trigger_runner.join(30)
+
     # Since we have now an in-memory process of forwarding the logs to stdout,
     # give it more time for the trigger event to write the log.
     time.sleep(0.5)
-    stdout = capsys.readouterr().out
 
-    assert "test_dag/test_run/sensitive_arg_task/-1/1 (ID 1) starting" in stdout
-    assert "some_password" not in stdout
+    assert "test_dag/test_run/sensitive_arg_task/-1/0 (ID 1) starting" in caplog.text
+    assert "some_password" not in caplog.text
 
 
 def test_is_alive():
@@ -210,8 +216,8 @@ def test_capacity_decode():
         4 / 2,  # Resolves to a float, in addition to being just plain weird
     ]
     for input_str in variants:
+        job = Job()
         with pytest.raises(ValueError):
-            job = Job()
             TriggererJobRunner(job=job, capacity=input_str)
 
 
@@ -257,6 +263,132 @@ def test_trigger_lifecycle(session):
     finally:
         # We always have to stop the runner
         job_runner.trigger_runner.stop = True
+        job_runner.trigger_runner.join(30)
+
+
+class TestTriggerRunner:
+    @pytest.mark.asyncio
+    @patch("airflow.jobs.triggerer_job_runner.TriggerRunner.set_individual_trigger_logging")
+    async def test_run_inline_trigger_canceled(self, session) -> None:
+        trigger_runner = TriggerRunner()
+        trigger_runner.triggers = {1: {"task": MagicMock(), "name": "mock_name", "events": 0}}
+        mock_trigger = MagicMock()
+        mock_trigger.task_instance.trigger_timeout = None
+        mock_trigger.run.side_effect = asyncio.CancelledError()
+
+        with pytest.raises(asyncio.CancelledError):
+            await trigger_runner.run_trigger(1, mock_trigger)
+
+    @pytest.mark.asyncio
+    @patch("airflow.jobs.triggerer_job_runner.TriggerRunner.set_individual_trigger_logging")
+    async def test_run_inline_trigger_timeout(self, session, caplog) -> None:
+        trigger_runner = TriggerRunner()
+        trigger_runner.triggers = {1: {"task": MagicMock(), "name": "mock_name", "events": 0}}
+        mock_trigger = MagicMock()
+        mock_trigger.task_instance.trigger_timeout = timezone.utcnow() - datetime.timedelta(hours=1)
+        mock_trigger.run.side_effect = asyncio.CancelledError()
+
+        with pytest.raises(asyncio.CancelledError):
+            await trigger_runner.run_trigger(1, mock_trigger)
+        assert "Trigger cancelled due to timeout" in caplog.text
+
+    @patch("airflow.models.trigger.Trigger.bulk_fetch")
+    @patch(
+        "airflow.jobs.triggerer_job_runner.TriggerRunner.get_trigger_by_classpath",
+        return_value=DateTimeTrigger,
+    )
+    def test_update_trigger_with_triggerer_argument_change(
+        self, mock_bulk_fetch, mock_get_trigger_by_classpath, session, caplog
+    ) -> None:
+        trigger_runner = TriggerRunner()
+        mock_trigger_orm = MagicMock()
+        mock_trigger_orm.kwargs = {"moment": ..., "not_exists_arg": ...}
+        mock_get_trigger_by_classpath.return_value = {1: mock_trigger_orm}
+
+        trigger_runner.update_triggers({1})
+
+        assert "Trigger failed" in caplog.text
+        assert "got an unexpected keyword argument 'not_exists_arg'" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_trigger_create_race_condition_38599(session, tmp_path):
+    """
+    This verifies the resolution of race condition documented in github issue #38599.
+    More details in the issue description.
+
+    The race condition may occur in the following scenario:
+        1. TaskInstance TI1 defers itself, which creates Trigger T1, which holds a
+            reference to TI1.
+        2. T1 gets picked up by TriggererJobRunner TJR1 and starts running T1.
+        3. TJR1 misses a heartbeat, most likely due to high host load causing delays in
+            each TriggererJobRunner._run_trigger_loop loop.
+        4. A second TriggererJobRunner TJR2 notices that T1 has missed its heartbeat,
+            so it starts the process of picking up any Triggers that TJR1 may have had,
+            including T1.
+        5. Before TJR2 starts executing T1, TJR1 finishes execution of T1 and cleans it
+            up by clearing the trigger_id of TI1.
+        6. TJR2 tries to execute T1, but it crashes (with the above error) while trying to
+            look up TI1 (because T1 no longer has a TaskInstance linked to it).
+    """
+    path = tmp_path / "test_trigger_create_after_completion.txt"
+    trigger = TimeDeltaTrigger_(delta=datetime.timedelta(microseconds=1), filename=path.as_posix())
+    trigger_orm = Trigger.from_object(trigger)
+    trigger_orm.id = 1
+    session.add(trigger_orm)
+
+    dag = DagModel(dag_id="test-dag")
+    dag_run = DagRun(dag.dag_id, run_id="abc", run_type="none")
+    ti = TaskInstance(
+        PythonOperator(task_id="dummy-task", python_callable=print),
+        run_id=dag_run.run_id,
+        state=TaskInstanceState.DEFERRED,
+    )
+    ti.dag_id = dag.dag_id
+    ti.trigger_id = 1
+    session.add(dag)
+    session.add(dag_run)
+    session.add(ti)
+
+    job1 = Job()
+    job2 = Job()
+    session.add(job1)
+    session.add(job2)
+
+    session.commit()
+
+    job_runner1 = TriggererJobRunner(job1)
+    job_runner2 = TriggererJobRunner(job2)
+
+    # Assign and run the trigger on the first TriggererJobRunner
+    # Instead of running job_runner1._execute, we will run the individual methods
+    # to control the timing of the execution.
+    job_runner1.load_triggers()
+    assert len(job_runner1.trigger_runner.to_create) == 1
+    # Before calling job_runner1.handle_events, run the trigger synchronously
+    await job_runner1.trigger_runner.create_triggers()
+    assert len(job_runner1.trigger_runner.triggers) == 1
+    _, trigger_task_info = next(iter(job_runner1.trigger_runner.triggers.items()))
+    await trigger_task_info["task"]
+    assert trigger_task_info["task"].done()
+
+    # In a real execution environment, a missed heartbeat would cause the trigger to be picked up
+    # by another TriggererJobRunner.
+    # In this test, however, this is not necessary because we are controlling the execution
+    # of the TriggererJobRunner.
+    # job1.latest_heartbeat = timezone.utcnow() - datetime.timedelta(hours=1)
+    # session.commit()
+
+    # This calls Trigger.submit_event, which will unlink the trigger from the task instance
+    job_runner1.handle_events()
+
+    # Simulate the second TriggererJobRunner picking up the trigger
+    job_runner2.trigger_runner.update_triggers({trigger_orm.id})
+    # The race condition happens here.
+    # AttributeError: 'NoneType' object has no attribute 'dag_id'
+    await job_runner2.trigger_runner.create_triggers()
+
+    assert path.read_text() == "hi\n"
 
 
 def test_trigger_create_race_condition_18392(session, tmp_path):
@@ -363,13 +495,13 @@ def test_trigger_create_race_condition_18392(session, tmp_path):
             pytest.fail("did not observe 2 loops in the runner thread")
     finally:
         job_runner.trigger_runner.stop = True
-        job_runner.trigger_runner.join()
+        job_runner.trigger_runner.join(30)
         thread.join()
     instances = path.read_text().splitlines()
     assert len(instances) == 1
 
 
-def test_trigger_from_dead_triggerer(session):
+def test_trigger_from_dead_triggerer(session, create_task_instance):
     """
     Checks that the triggerer will correctly claim a Trigger that is assigned to a
     triggerer that does not exist.
@@ -380,6 +512,13 @@ def test_trigger_from_dead_triggerer(session):
     trigger_orm.id = 1
     trigger_orm.triggerer_id = 999  # Non-existent triggerer
     session.add(trigger_orm)
+    ti_orm = create_task_instance(
+        task_id="ti_orm",
+        logical_date=timezone.utcnow(),
+        run_id="orm_run_id",
+    )
+    ti_orm.trigger_id = trigger_orm.id
+    session.add(trigger_orm)
     session.commit()
     # Make a TriggererJobRunner and have it retrieve DB tasks
     job = Job()
@@ -389,7 +528,7 @@ def test_trigger_from_dead_triggerer(session):
     assert [x for x, y in job_runner.trigger_runner.to_create] == [1]
 
 
-def test_trigger_from_expired_triggerer(session):
+def test_trigger_from_expired_triggerer(session, create_task_instance):
     """
     Checks that the triggerer will correctly claim a Trigger that is assigned to a
     triggerer that has an expired heartbeat.
@@ -399,6 +538,13 @@ def test_trigger_from_expired_triggerer(session):
     trigger_orm = Trigger.from_object(trigger)
     trigger_orm.id = 1
     trigger_orm.triggerer_id = 42
+    session.add(trigger_orm)
+    ti_orm = create_task_instance(
+        task_id="ti_orm",
+        logical_date=timezone.utcnow(),
+        run_id="orm_run_id",
+    )
+    ti_orm.trigger_id = trigger_orm.id
     session.add(trigger_orm)
     # Use a TriggererJobRunner with an expired heartbeat
     triggerer_job_orm = Job(TriggererJobRunner.job_type)
@@ -414,6 +560,49 @@ def test_trigger_from_expired_triggerer(session):
     job_runner.load_triggers()
     # Make sure it turned up in TriggerRunner's queue
     assert [x for x, y in job_runner.trigger_runner.to_create] == [1]
+
+
+def test_trigger_runner_exception_stops_triggerer(session):
+    """
+    Checks that if an exception occurs when creating triggers, that the triggerer
+    process stops
+    """
+
+    class MockTriggerException(Exception):
+        pass
+
+    class TriggerRunner_(TriggerRunner):
+        async def create_triggers(self):
+            raise MockTriggerException("Trigger creation failed")
+
+    # Use a trigger that will immediately succeed
+    trigger = SuccessTrigger()
+    create_trigger_in_db(session, trigger)
+
+    # Make a TriggererJobRunner and have it retrieve DB tasks
+    job = Job()
+    job_runner = TriggererJobRunner(job)
+    job_runner.trigger_runner = TriggerRunner_()
+    thread = Thread(target=job_runner._execute)
+    thread.start()
+
+    # Wait 4 seconds for the triggerer to stop
+    try:
+        for _ in range(40):
+            time.sleep(0.1)
+            if not thread.is_alive():
+                break
+        else:
+            pytest.fail("TriggererJobRunner did not stop after exception in TriggerRunner")
+
+        if not job_runner.trigger_runner.stop:
+            pytest.fail("TriggerRunner not marked as stopped after exception in TriggerRunner")
+
+    finally:
+        job_runner.trigger_runner.stop = True
+        # with suppress(MockTriggerException):
+        job_runner.trigger_runner.join(30)
+        thread.join()
 
 
 def test_trigger_firing(session):
@@ -443,6 +632,7 @@ def test_trigger_firing(session):
     finally:
         # We always have to stop the runner
         job_runner.trigger_runner.stop = True
+        job_runner.trigger_runner.join(30)
 
 
 def test_trigger_failing(session):
@@ -465,7 +655,7 @@ def test_trigger_failing(session):
         for _ in range(30):
             if job_runner.trigger_runner.failed_triggers:
                 assert len(job_runner.trigger_runner.failed_triggers) == 1
-                trigger_id, exc = list(job_runner.trigger_runner.failed_triggers)[0]
+                trigger_id, exc = next(iter(job_runner.trigger_runner.failed_triggers))
                 assert trigger_id == 1
                 assert isinstance(exc, ValueError)
                 assert exc.args[0] == "Deliberate trigger failure"
@@ -476,6 +666,7 @@ def test_trigger_failing(session):
     finally:
         # We always have to stop the runner
         job_runner.trigger_runner.stop = True
+        job_runner.trigger_runner.join(30)
 
 
 def test_trigger_cleanup(session):
@@ -569,9 +760,6 @@ def test_queue_listener():
     reset_logging()
     importlib.reload(airflow_local_settings)
     configure_logging()
-
-    def non_pytest_handlers(val):
-        return [h for h in val if "pytest" not in h.__module__]
 
     import logging
 

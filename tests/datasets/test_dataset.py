@@ -15,34 +15,64 @@
 # specific language governing permissions and limitations
 # under the License.
 
+
 from __future__ import annotations
 
 import pytest
 
-from airflow.datasets import Dataset
-from airflow.operators.empty import EmptyOperator
-
 
 @pytest.mark.parametrize(
-    ["uri"],
-    [
-        pytest.param("", id="empty"),
-        pytest.param("\n\t", id="whitespace"),
-        pytest.param("a" * 3001, id="too_long"),
-        pytest.param("airflow:" * 3001, id="reserved_scheme"),
-        pytest.param("😊" * 3001, id="non-ascii"),
-    ],
+    "module_path, attr_name, warning_message",
+    (
+        (
+            "airflow",
+            "Dataset",
+            (
+                "Import 'Dataset' directly from the airflow module is deprecated and will be removed in the future. "
+                "Please import it from 'airflow.sdk.definitions.asset.Dataset'."
+            ),
+        ),
+        (
+            "airflow.datasets",
+            "Dataset",
+            (
+                "Import 'airflow.dataset.Dataset' is deprecated and "
+                "will be removed in the Airflow 3.2. Please import it from 'airflow.sdk.definitions.asset.Asset'."
+            ),
+        ),
+        (
+            "airflow.datasets",
+            "DatasetAlias",
+            (
+                "Import 'airflow.dataset.DatasetAlias' is deprecated and "
+                "will be removed in the Airflow 3.2. Please import it from 'airflow.sdk.definitions.asset.AssetAlias'."
+            ),
+        ),
+        (
+            "airflow.datasets",
+            "expand_alias_to_datasets",
+            (
+                "Import 'airflow.dataset.expand_alias_to_datasets' is deprecated and "
+                "will be removed in the Airflow 3.2. Please import it from 'airflow.models.asset.expand_alias_to_assets'."
+            ),
+        ),
+        (
+            "airflow.datasets.metadata",
+            "Metadata",
+            (
+                "Import from the airflow.dataset module is deprecated and "
+                "will be removed in the Airflow 3.2. Please import it from "
+                "'airflow.sdk.definitions.asset.metadata'."
+            ),
+        ),
+    ),
 )
-def test_invalid_uris(uri):
-    with pytest.raises(ValueError):
-        Dataset(uri=uri)
+def test_backward_compat_import_before_airflow_3_2(module_path, attr_name, warning_message):
+    with pytest.warns() as record:
+        import importlib
 
+        mod = importlib.import_module(module_path, __name__)
+        getattr(mod, attr_name)
 
-def test_uri_with_scheme():
-    dataset = Dataset(uri="s3://example_dataset")
-    EmptyOperator(task_id="task1", outlets=[dataset])
-
-
-def test_uri_without_scheme():
-    dataset = Dataset(uri="example_dataset")
-    EmptyOperator(task_id="task1", outlets=[dataset])
+    assert record[0].category is DeprecationWarning
+    assert str(record[0].message) == warning_message

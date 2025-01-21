@@ -21,11 +21,12 @@
 ## Airflow Flower Ingress
 #################################
 {{- if .Values.flower.enabled }}
-{{- if and (or .Values.ingress.flower.enabled .Values.ingress.enabled) (or (eq .Values.executor "CeleryExecutor") (eq .Values.executor "CeleryKubernetesExecutor")) }}
+{{- if and (or .Values.ingress.flower.enabled .Values.ingress.enabled) (or (contains "CeleryExecutor" .Values.executor) (contains "CeleryKubernetesExecutor" .Values.executor)) }}
+{{- $fullname := (include "airflow.fullname" .) }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Release.Name }}-flower-ingress
+  name: {{ $fullname }}-flower-ingress
   labels:
     tier: airflow
     component: flower-ingress
@@ -72,7 +73,7 @@ spec:
         paths:
           - backend:
               service:
-                name: {{ $.Release.Name }}-flower
+                name: {{ $fullname }}-flower
                 port:
                   name: flower-ui
             {{- if $.Values.ingress.flower.path }}
@@ -84,7 +85,7 @@ spec:
       {{- $hostname = .name -}}
       {{- end }}
       {{- if $hostname }}
-      host: {{ $hostname | quote }}
+      host: {{ tpl $hostname $ | quote }}
       {{- end }}
     {{- end }}
   {{- if .Values.ingress.flower.ingressClassName }}

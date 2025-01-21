@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import datetime
 import json
+from decimal import Decimal
+from urllib.parse import quote
 
 import pytest
 
@@ -27,14 +29,19 @@ from airflow.models.param import Param
 from airflow.operators.empty import EmptyOperator
 from airflow.security import permissions
 from airflow.utils import timezone
+from airflow.utils.json import WebEncoder
 from airflow.utils.session import create_session
 from airflow.utils.types import DagRunType
-from tests.test_utils.api_connexion_utils import create_test_client
-from tests.test_utils.www import check_content_in_response
+
+from providers.tests.fab.auth_manager.api_endpoints.api_connexion_utils import create_test_client
+from tests_common.test_utils.config import conf_vars
+from tests_common.test_utils.www import check_content_in_response
+
+pytestmark = pytest.mark.db_test
 
 
-@pytest.fixture(scope="function", autouse=True)
-def initialize_one_dag():
+@pytest.fixture(autouse=True)
+def _initialize_one_dag():
     with create_session() as session:
         DagBag().get_dag("example_bash_operator").sync_to_db(session=session)
     yield
@@ -54,7 +61,7 @@ def test_trigger_dag_button_normal_exist(admin_client):
 )
 def test_trigger_dag_button(admin_client, req, expected_run_id):
     test_dag_id = "example_bash_operator"
-    admin_client.post(f"dags/{test_dag_id}/trigger?{req}")
+    admin_client.post(f"dags/{test_dag_id}/trigger?{req}", data={"conf": "{}"})
     with create_session() as session:
         run = session.query(DagRun).filter(DagRun.dag_id == test_dag_id).first()
     assert run is not None
@@ -65,8 +72,12 @@ def test_trigger_dag_button(admin_client, req, expected_run_id):
 def test_duplicate_run_id(admin_client):
     test_dag_id = "example_bash_operator"
     run_id = "test_run"
-    admin_client.post(f"dags/{test_dag_id}/trigger?run_id={run_id}", follow_redirects=True)
-    response = admin_client.post(f"dags/{test_dag_id}/trigger?run_id={run_id}", follow_redirects=True)
+    admin_client.post(
+        f"dags/{test_dag_id}/trigger?run_id={run_id}", data={"conf": "{}"}, follow_redirects=True
+    )
+    response = admin_client.post(
+        f"dags/{test_dag_id}/trigger?run_id={run_id}", data={"conf": "{}"}, follow_redirects=True
+    )
     check_content_in_response(f"The run ID {run_id} already exists", response)
 
 
@@ -82,6 +93,32 @@ def test_trigger_dag_conf(admin_client):
     assert DagRunType.MANUAL in run.run_id
     assert run.run_type == DagRunType.MANUAL
     assert run.conf == conf_dict
+
+
+def test_trigger_dag_conf_serializable_fields(admin_client):
+    test_dag_id = "example_bash_operator"
+    time_now = timezone.utcnow()
+    conf_dict = {
+        "string": "Hello, World!",
+        "date_str": "2024-08-08T09:57:35.300858",
+        "datetime": time_now,
+        "decimal": Decimal(10.465),
+    }
+    expected_conf = {
+        "string": "Hello, World!",
+        "date_str": "2024-08-08T09:57:35.300858",
+        "datetime": time_now.isoformat(),
+        "decimal": 10.465,
+    }
+
+    admin_client.post(f"dags/{test_dag_id}/trigger", data={"conf": json.dumps(conf_dict, cls=WebEncoder)})
+
+    with create_session() as session:
+        run = session.query(DagRun).filter(DagRun.dag_id == test_dag_id).first()
+    assert run is not None
+    assert DagRunType.MANUAL in run.run_id
+    assert run.run_type == DagRunType.MANUAL
+    assert run.conf == expected_conf
 
 
 def test_trigger_dag_conf_malformed(admin_client):
@@ -106,29 +143,33 @@ def test_trigger_dag_conf_not_dict(admin_client):
     assert run is None
 
 
-def test_trigger_dag_wrong_execution_date(admin_client):
+def test_trigger_dag_wrong_logical_date(admin_client):
     test_dag_id = "example_bash_operator"
 
-    response = admin_client.post(f"dags/{test_dag_id}/trigger", data={"execution_date": "not_a_date"})
-    check_content_in_response("Invalid execution date", response)
+    response = admin_client.post(
+        f"dags/{test_dag_id}/trigger", data={"conf": "{}", "logical_date": "not_a_date"}
+    )
+    check_content_in_response("Invalid logical date", response)
 
     with create_session() as session:
         run = session.query(DagRun).filter(DagRun.dag_id == test_dag_id).first()
     assert run is None
 
 
-def test_trigger_dag_execution_date_data_interval(admin_client):
+def test_trigger_dag_logical_date_data_interval(admin_client):
     test_dag_id = "example_bash_operator"
     exec_date = timezone.utcnow()
 
-    admin_client.post(f"dags/{test_dag_id}/trigger", data={"execution_date": exec_date.isoformat()})
+    admin_client.post(
+        f"dags/{test_dag_id}/trigger", data={"conf": "{}", "logical_date": exec_date.isoformat()}
+    )
 
     with create_session() as session:
         run = session.query(DagRun).filter(DagRun.dag_id == test_dag_id).first()
     assert run is not None
     assert DagRunType.MANUAL in run.run_id
     assert run.run_type == DagRunType.MANUAL
-    assert run.execution_date == exec_date
+    assert run.logical_date == exec_date
 
     # Since example_bash_operator runs once per day, the data interval should be
     # between midnight yesterday and midnight today.
@@ -287,3 +328,33 @@ def test_trigger_dag_params_array_value_none_render(admin_client, dag_maker, ses
         f'<textarea style="display: none;" id="json_start" name="json_start">{expected_dag_conf}</textarea>',
         resp,
     )
+
+
+@pytest.mark.parametrize(
+    "pattern, run_id, result",
+    [
+        ["^[A-Z]", "ABC", True],
+        ["^[A-Z]", "abc", False],
+        ["^[0-9]", "123", True],
+        # The below params tests that user configuration does not affect internally generated
+        # run_ids. We use manual__ as a prefix for manually triggered DAGs due to a restriction
+        # in manually triggered DAGs that the run_id must not start with scheduled__.
+        ["", "manual__2023-01-01T00:00:00+00:00", True],
+        ["", "scheduled_2023-01-01T00", False],
+        ["", "manual_2023-01-01T00", False],
+        ["", "asset_triggered_2023-01-01T00", False],
+        ["^[0-9]", "manual__2023-01-01T00:00:00+00:00", True],
+        ["^[a-z]", "manual__2023-01-01T00:00:00+00:00", True],
+    ],
+)
+def test_dag_run_id_pattern(session, admin_client, pattern, run_id, result):
+    with conf_vars({("scheduler", "allowed_run_id_pattern"): pattern}):
+        test_dag_id = "example_bash_operator"
+        run_id = quote(run_id)
+        admin_client.post(f"dags/{test_dag_id}/trigger?run_id={run_id}", data={"conf": "{}"})
+        run = session.query(DagRun).filter(DagRun.dag_id == test_dag_id).first()
+        if result:
+            assert run is not None
+            assert run.run_type == DagRunType.MANUAL
+        else:
+            assert run is None

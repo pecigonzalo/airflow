@@ -18,32 +18,28 @@ from __future__ import annotations
 
 import contextlib
 import copy
-import datetime
 import json
 import logging
-import warnings
-from typing import TYPE_CHECKING, Any, ClassVar, ItemsView, Iterable, MutableMapping, ValuesView
+from collections.abc import ItemsView, Iterable, MutableMapping, ValuesView
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from pendulum.parsing import parse_iso8601
-
-from airflow.exceptions import AirflowException, ParamValidationError, RemovedInAirflow3Warning
-from airflow.utils import timezone
-from airflow.utils.context import Context
-from airflow.utils.mixins import ResolveMixin
+from airflow.exceptions import AirflowException, ParamValidationError
+from airflow.sdk.definitions._internal.mixins import ResolveMixin
 from airflow.utils.types import NOTSET, ArgNotSet
 
 if TYPE_CHECKING:
-    from airflow.models.dag import DAG
-    from airflow.models.dagrun import DagRun
-    from airflow.models.operator import Operator
+    from airflow.sdk.definitions.context import Context
+    from airflow.sdk.definitions.dag import DAG
+    from airflow.sdk.types import Operator
 
 logger = logging.getLogger(__name__)
 
 
 class Param:
     """
-    Class to hold the default value of a Param and rule set to do the validations. Without the rule set
-    it always validates and returns the default value.
+    Class to hold the default value of a Param and rule set to do the validations.
+
+    Without the rule set it always validates and returns the default value.
 
     :param default: The value this Param object holds
     :param description: Optional help text for the Param
@@ -57,7 +53,7 @@ class Param:
 
     def __init__(self, default: Any = NOTSET, description: str | None = None, **kwargs):
         if default is not NOTSET:
-            self._warn_if_not_json(default)
+            self._check_json(default)
         self.value = default
         self.description = description
         self.schema = kwargs.pop("schema") if "schema" in kwargs else kwargs
@@ -66,40 +62,19 @@ class Param:
         return Param(self.value, self.description, schema=self.schema)
 
     @staticmethod
-    def _warn_if_not_json(value):
+    def _check_json(value):
         try:
             json.dumps(value)
         except Exception:
-            warnings.warn(
-                "The use of non-json-serializable params is deprecated and will be removed in "
-                "a future release",
-                RemovedInAirflow3Warning,
+            raise ParamValidationError(
+                "All provided parameters must be json-serializable. "
+                f"The value '{value}' is not serializable."
             )
-
-    @staticmethod
-    def _warn_if_not_rfc3339_dt(value):
-        """Fallback to iso8601 datetime validation if rfc3339 failed."""
-        try:
-            iso8601_value = parse_iso8601(value)
-        except Exception:
-            return None
-        if not isinstance(iso8601_value, datetime.datetime):
-            return None
-        warnings.warn(
-            f"The use of non-RFC3339 datetime: {value!r} is deprecated "
-            "and will be removed in a future release",
-            RemovedInAirflow3Warning,
-        )
-        if timezone.is_naive(iso8601_value):
-            warnings.warn(
-                "The use naive datetime is deprecated and will be removed in a future release",
-                RemovedInAirflow3Warning,
-            )
-        return value
 
     def resolve(self, value: Any = NOTSET, suppress_exception: bool = False) -> Any:
         """
-        Runs the validations and returns the Param's final value.
+        Run the validations and returns the Param's final value.
+
         May raise ValueError on failed validations, or TypeError
         if no value is passed and no value already exists.
         We first check that value is json-serializable; if not, warn.
@@ -114,8 +89,8 @@ class Param:
         from jsonschema.exceptions import ValidationError
 
         if value is not NOTSET:
-            self._warn_if_not_json(value)
-        final_val = value if value is not NOTSET else self.value
+            self._check_json(value)
+        final_val = self.value if value is NOTSET else value
         if isinstance(final_val, ArgNotSet):
             if suppress_exception:
                 return None
@@ -123,11 +98,6 @@ class Param:
         try:
             jsonschema.validate(final_val, self.schema, format_checker=FormatChecker())
         except ValidationError as err:
-            if err.schema.get("format") == "date-time":
-                rfc3339_value = self._warn_if_not_rfc3339_dt(final_val)
-                if rfc3339_value:
-                    self.value = rfc3339_value
-                    return rfc3339_value
             if suppress_exception:
                 return None
             raise ParamValidationError(err) from None
@@ -136,13 +106,18 @@ class Param:
 
     def dump(self) -> dict:
         """Dump the Param as a dictionary."""
-        out_dict = {self.CLASS_IDENTIFIER: f"{self.__module__}.{self.__class__.__name__}"}
+        out_dict: dict[str, str | None] = {
+            self.CLASS_IDENTIFIER: f"{self.__module__}.{self.__class__.__name__}"
+        }
         out_dict.update(self.__dict__)
+        # Ensure that not set is translated to None
+        if self.value is NOTSET:
+            out_dict["value"] = None
         return out_dict
 
     @property
     def has_value(self) -> bool:
-        return self.value is not NOTSET
+        return self.value is not NOTSET and self.value is not None
 
     def serialize(self) -> dict:
         return {"value": self.value, "description": self.description, "schema": self.schema}
@@ -157,19 +132,21 @@ class Param:
 
 class ParamsDict(MutableMapping[str, Any]):
     """
-    Class to hold all params for dags or tasks. All the keys are strictly string and values
-    are converted into Param's object if they are not already. This class is to replace param's
-    dictionary implicitly and ideally not needed to be used directly.
+    Class to hold all params for dags or tasks.
+
+    All the keys are strictly string and values are converted into Param's object
+    if they are not already. This class is to replace param's dictionary implicitly
+    and ideally not needed to be used directly.
+
+
+    :param dict_obj: A dict or dict like object to init ParamsDict
+    :param suppress_exception: Flag to suppress value exceptions while initializing the ParamsDict
     """
 
     __version__: ClassVar[int] = 1
     __slots__ = ["__dict", "suppress_exception"]
 
     def __init__(self, dict_obj: MutableMapping | None = None, suppress_exception: bool = False):
-        """
-        :param dict_obj: A dict or dict like object to init ParamsDict
-        :param suppress_exception: Flag to suppress value exceptions while initializing the ParamsDict
-        """
         params_dict: dict[str, Param] = {}
         dict_obj = dict_obj or {}
         for k, v in dict_obj.items():
@@ -213,8 +190,7 @@ class ParamsDict(MutableMapping[str, Any]):
 
     def __setitem__(self, key: str, value: Any) -> None:
         """
-        Override for dictionary's ``setitem`` method. This method make sure that all values are of
-        Param's type only.
+        Override for dictionary's ``setitem`` method to ensure all values are of Param's type only.
 
         :param key: A key which needs to be inserted or updated in the dict
         :param value: A value which needs to be set against the key. It could be of any
@@ -236,8 +212,7 @@ class ParamsDict(MutableMapping[str, Any]):
 
     def __getitem__(self, key: str) -> Any:
         """
-        Override for dictionary's ``getitem`` method. After fetching the key, it would call the
-        resolve method as well on the Param object.
+        Override for dictionary's ``getitem`` method to call the resolve method after fetching the key.
 
         :param key: The key to fetch
         """
@@ -260,11 +235,11 @@ class ParamsDict(MutableMapping[str, Any]):
         super().update(*args, **kwargs)
 
     def dump(self) -> dict[str, Any]:
-        """Dumps the ParamsDict object as a dictionary, while suppressing exceptions."""
+        """Dump the ParamsDict object as a dictionary, while suppressing exceptions."""
         return {k: v.resolve(suppress_exception=True) for k, v in self.items()}
 
     def validate(self) -> dict[str, Any]:
-        """Validates & returns all the Params object stored in the dictionary."""
+        """Validate & returns all the Params object stored in the dictionary."""
         resolved_dict = {}
         try:
             for k, v in self.items():
@@ -286,7 +261,8 @@ class ParamsDict(MutableMapping[str, Any]):
 
 
 class DagParam(ResolveMixin):
-    """DAG run parameter reference.
+    """
+    DAG run parameter reference.
 
     This binds a simple Param object to a name within a DAG instance, so that it
     can be resolved during the runtime via the ``{{ context }}`` dictionary. The
@@ -313,37 +289,65 @@ class DagParam(ResolveMixin):
             current_dag.params[name] = default
         self._name = name
         self._default = default
+        self.current_dag = current_dag
 
     def iter_references(self) -> Iterable[tuple[Operator, str]]:
         return ()
 
-    def resolve(self, context: Context) -> Any:
+    def resolve(self, context: Context, *, include_xcom: bool = True) -> Any:
         """Pull DagParam value from DagRun context. This method is run during ``op.execute()``."""
         with contextlib.suppress(KeyError):
-            return context["dag_run"].conf[self._name]
+            if context["dag_run"].conf:
+                return context["dag_run"].conf[self._name]
         if self._default is not NOTSET:
             return self._default
         with contextlib.suppress(KeyError):
             return context["params"][self._name]
         raise AirflowException(f"No value could be resolved for parameter {self._name}")
 
+    def serialize(self) -> dict:
+        """Serialize the DagParam object into a dictionary."""
+        return {
+            "dag_id": self.current_dag.dag_id,
+            "name": self._name,
+            "default": self._default,
+        }
+
+    @classmethod
+    def deserialize(cls, data: dict, dags: dict) -> DagParam:
+        """
+        Deserializes the dictionary back into a DagParam object.
+
+        :param data: The serialized representation of the DagParam.
+        :param dags: A dictionary of available DAGs to look up the DAG.
+        """
+        dag_id = data["dag_id"]
+        # Retrieve the current DAG from the provided DAGs dictionary
+        current_dag = dags.get(dag_id)
+        if not current_dag:
+            raise ValueError(f"DAG with id {dag_id} not found.")
+
+        return cls(current_dag=current_dag, name=data["name"], default=data["default"])
+
 
 def process_params(
     dag: DAG,
     task: Operator,
-    dag_run: DagRun | None,
+    dagrun_conf: dict[str, Any] | None,
     *,
     suppress_exception: bool,
 ) -> dict[str, Any]:
     """Merge, validate params, and convert them into a simple dict."""
     from airflow.configuration import conf
 
+    dagrun_conf = dagrun_conf or {}
+
     params = ParamsDict(suppress_exception=suppress_exception)
     with contextlib.suppress(AttributeError):
         params.update(dag.params)
     if task.params:
         params.update(task.params)
-    if conf.getboolean("core", "dag_run_conf_overrides_params") and dag_run and dag_run.conf:
-        logger.debug("Updating task params (%s) with DagRun.conf (%s)", params, dag_run.conf)
-        params.update(dag_run.conf)
+    if conf.getboolean("core", "dag_run_conf_overrides_params") and dagrun_conf:
+        logger.debug("Updating task params (%s) with DagRun.conf (%s)", params, dagrun_conf)
+        params.update(dagrun_conf)
     return params.validate()

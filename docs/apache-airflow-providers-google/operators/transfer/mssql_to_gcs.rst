@@ -24,7 +24,7 @@ data from Microsoft SQL Server to GCS.
 Prerequisite Tasks
 ^^^^^^^^^^^^^^^^^^
 
-.. include::/howto/operator/google/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 .. _howto/operator:MSSQLToGCSOperator:
 
@@ -36,7 +36,7 @@ data from Microsoft SQL Server database to GCS.
 
 Below is an example of using this operator to upload data to GCS.
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/gcs/example_mssql_to_gcs.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/gcs/example_mssql_to_gcs.py
     :language: python
     :start-after: [START howto_operator_mssql_to_gcs]
     :end-before: [END howto_operator_mssql_to_gcs]

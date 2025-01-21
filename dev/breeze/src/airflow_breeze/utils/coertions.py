@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def coerce_bool_value(value: str | bool) -> bool:
@@ -30,4 +30,4 @@ def coerce_bool_value(value: str | bool) -> bool:
 
 
 def one_or_none_set(iterable: Iterable[bool]) -> bool:
-    return len([i for i in iterable if i]) in (0, 1)
+    return 0 <= sum(1 for i in iterable if i) <= 1

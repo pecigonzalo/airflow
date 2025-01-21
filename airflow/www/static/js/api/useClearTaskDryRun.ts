@@ -30,7 +30,7 @@ const useClearTaskDryRun = ({
   dagId,
   runId,
   taskId,
-  executionDate,
+  logicalDate,
   isGroup,
   past,
   future,
@@ -39,11 +39,12 @@ const useClearTaskDryRun = ({
   recursive,
   failed,
   mapIndexes = [],
+  enabled = false,
 }: {
   dagId: string;
   runId: string;
   taskId: string;
-  executionDate: string;
+  logicalDate: string;
   isGroup: boolean;
   past: boolean;
   future: boolean;
@@ -52,6 +53,7 @@ const useClearTaskDryRun = ({
   recursive: boolean;
   failed: boolean;
   mapIndexes?: number[];
+  enabled?: boolean;
 }) =>
   useQuery(
     [
@@ -73,7 +75,7 @@ const useClearTaskDryRun = ({
         dag_id: dagId,
         dag_run_id: runId,
         confirmed: false,
-        execution_date: executionDate,
+        logical_date: logicalDate,
         past,
         future,
         upstream,
@@ -101,7 +103,8 @@ const useClearTaskDryRun = ({
           },
         }
       );
-    }
+    },
+    { enabled }
   );
 
 export default useClearTaskDryRun;

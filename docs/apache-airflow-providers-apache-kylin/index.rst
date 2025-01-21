@@ -19,10 +19,25 @@
 =========================================
 
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Guides
+
+    Connection types <connections>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
@@ -30,15 +45,17 @@ Content
 
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
-    System Tests <_api/tests/system/providers/apache/kylin/index>
+    System Tests <_api/tests/system/apache/kylin/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
-    Example DAGs <https://github.com/apache/airflow/tree/providers-apache-kylin/|version|/tests/system/providers/apache/kylin>
+    Example DAGs <https://github.com/apache/airflow/tree/providers-apache-kylin/|version|/providers/tests/system/apache/kylin>
     PyPI Repository <https://pypi.org/project/apache-airflow-providers-apache-kylin/>
     Installing from sources <installing-providers-from-sources>
 
@@ -46,43 +63,42 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-apache-kylin
+apache-airflow-providers-apache-kylin package
 ------------------------------------------------------
 
 `Apache Kylin <https://kylin.apache.org/>`__
 
 
-Release: 3.2.0
+Release: 3.8.0
 
 Provider package
 ----------------
 
-This is a provider package for ``apache.kylin`` provider. All classes for this provider package
-are in ``airflow.providers.apache.kylin`` python package.
+This package is for the ``apache.kylin`` provider.
+All classes for this package are included in the ``airflow.providers.apache.kylin`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-apache-kylin``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-apache-kylin``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
 ==================  ==================
 PIP package         Version required
 ==================  ==================
-``apache-airflow``  ``>=2.4.0``
-``kylinpy``         ``>=2.6``
+``apache-airflow``  ``>=2.9.0``
+``kylinpy``         ``>=2.7.0``
 ==================  ==================
-
-.. include:: ../../airflow/providers/apache/kylin/CHANGELOG.rst

@@ -69,19 +69,20 @@ export function escapeHtml(text) {
 window.escapeHtml = escapeHtml;
 
 export function convertSecsToHumanReadable(seconds) {
+  let processedSeconds = seconds;
   const oriSeconds = seconds;
   const floatingPart = oriSeconds - Math.floor(oriSeconds);
 
-  seconds = Math.floor(seconds);
+  processedSeconds = Math.floor(processedSeconds);
 
   const secondsPerHour = 60 * 60;
   const secondsPerMinute = 60;
 
-  const hours = Math.floor(seconds / secondsPerHour);
-  seconds -= hours * secondsPerHour;
+  const hours = Math.floor(processedSeconds / secondsPerHour);
+  processedSeconds -= hours * secondsPerHour;
 
-  const minutes = Math.floor(seconds / secondsPerMinute);
-  seconds -= minutes * secondsPerMinute;
+  const minutes = Math.floor(processedSeconds / secondsPerMinute);
+  processedSeconds -= minutes * secondsPerMinute;
 
   let readableFormat = "";
   if (hours > 0) {
@@ -90,12 +91,12 @@ export function convertSecsToHumanReadable(seconds) {
   if (minutes > 0) {
     readableFormat += `${minutes}Min `;
   }
-  if (seconds + floatingPart > 0) {
+  if (processedSeconds + floatingPart > 0) {
     if (Math.floor(oriSeconds) === oriSeconds) {
-      readableFormat += `${seconds}Sec`;
+      readableFormat += `${processedSeconds}Sec`;
     } else {
-      seconds += floatingPart;
-      readableFormat += `${seconds.toFixed(3)}Sec`;
+      processedSeconds += floatingPart;
+      readableFormat += `${processedSeconds.toFixed(3)}Sec`;
     }
   }
   return readableFormat;
@@ -179,35 +180,70 @@ function initializeUITimezone() {
   $("a[data-timezone]").click((evt) => {
     changeDisplayedTimezone($(evt.currentTarget).data("timezone"));
   });
-
-  $("#timezone-other").typeahead({
-    source: $(
-      moment.tz.names().map((tzName) => {
-        const category = tzName.split("/", 1)[0];
-        return { category, name: tzName.replace("_", " "), tzName };
-      })
-    ),
-    showHintOnFocus: "all",
-    showCategoryHeader: true,
-    items: "all",
-    afterSelect(data) {
-      // Clear it for next time we open the pop-up
-      this.$element.val("");
-
-      setManualTimezone(data.tzName);
-      changeDisplayedTimezone(data.tzName);
-
-      // We need to delay the close event to not be in the form handler,
-      // otherwise bootstrap ignores it, thinking it's caused by interaction on
-      // the <form>
-      setTimeout(() => {
-        document.activeElement.blur();
-        // Bug in typeahed, it thinks it's still shown!
-        this.shown = false;
-        this.focused = false;
-      }, 1);
-    },
+  // Prepare the data source
+  const timezoneData = moment.tz.names().map((tzName) => {
+    const category = tzName.split("/", 1)[0];
+    return { category, label: tzName.replace("_", " "), value: tzName };
   });
+
+  // Create a custom filter function to include categories
+  function filterByCategory(array, term) {
+    const matcher = new RegExp($.ui.autocomplete.escapeRegex(term), "i");
+    return $.grep(
+      array,
+      (item) => matcher.test(item.label) || matcher.test(item.category)
+    );
+  }
+
+  // Initialize jQuery UI Autocomplete
+  // eslint-disable-next-line no-underscore-dangle
+  $("#timezone-other")
+    .autocomplete({
+      source: (request, response) => {
+        const results = filterByCategory(timezoneData, request.term);
+        response(results);
+      },
+      appendTo: "#timezone-menu > li:nth-child(6) > form",
+      focus: (event, ui) => {
+        // Prevent the value from being inserted on focus
+        event.preventDefault();
+        $(this).val(ui.item.label);
+      },
+      select: (event, ui) => {
+        // Clear it for next time we open the pop-up
+        $(this).val("");
+
+        setManualTimezone(ui.item.value);
+        changeDisplayedTimezone(ui.item.value);
+
+        return false;
+      },
+    })
+    .data("ui-autocomplete")._renderItem = function (ul, item) {
+    const $li = $("<li>");
+    $li.append(
+      `<a class='dropdown-item' href='#' role='option'>${item.label}</a>`
+    );
+    return $li.appendTo(ul);
+  };
+
+  // Custom rendering function to include category headers
+  // eslint-disable-next-line no-underscore-dangle
+  $.ui.autocomplete.prototype._renderMenu = function (ul, items) {
+    let currentCategory = "";
+    ul.addClass("typeahead dropdown-menu");
+    ul.attr("role", "listbox");
+    $.each(items, (index, item) => {
+      if (item.category !== currentCategory) {
+        ul.append(
+          `<li class='ui-autocomplete-category dropdown-header'>${item.category}</li>`
+        );
+        currentCategory = item.category;
+      }
+      // eslint-disable-next-line no-underscore-dangle
+      this._renderItemData(ul, item);
+    });
+  };
 }
 
 function filterOpSelected(ele) {
@@ -285,4 +321,8 @@ $(document).ready(() => {
 
   // Global Tooltip selector
   $(".js-tooltip").tooltip();
+
+  // Turn off autocomplete for login form
+  $("#username:input")[0].autocomplete = "off";
+  $("#password:input")[0].autocomplete = "off";
 });

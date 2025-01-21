@@ -40,7 +40,7 @@ const BUILD_DIR = path.resolve(__dirname, "./static/dist");
 // Convert licenses json into a standard format for LICENSES.txt
 const formatLicenses = (packages) => {
   let text = `Apache Airflow
-Copyright 2016-2021 The Apache Software Foundation
+Copyright 2016-2023 The Apache Software Foundation
 
 This product includes software developed at The Apache Software
 Foundation (http://www.apache.org/).
@@ -61,13 +61,12 @@ const config = {
     connectionForm: `${JS_DIR}/connection_form.js`,
     chart: [`${CSS_DIR}/chart.css`],
     dag: `${JS_DIR}/dag.js`,
-    dagCode: `${JS_DIR}/dag_code.js`,
     dagDependencies: `${JS_DIR}/dag_dependencies.js`,
     dags: [`${CSS_DIR}/dags.css`, `${JS_DIR}/dags.js`],
     flash: `${CSS_DIR}/flash.css`,
-    gantt: [`${CSS_DIR}/gantt.css`, `${JS_DIR}/gantt.js`],
-    graph: [`${CSS_DIR}/graph.css`, `${JS_DIR}/graph.js`],
+    graph: `${CSS_DIR}/graph.css`,
     loadingDots: `${CSS_DIR}/loading-dots.css`,
+    login: `${JS_DIR}/login/index.tsx`,
     main: [`${CSS_DIR}/main.css`, `${JS_DIR}/main.js`],
     materialIcons: `${CSS_DIR}/material-icons.css`,
     moment: "moment-timezone",
@@ -75,11 +74,10 @@ const config = {
     task: `${JS_DIR}/task.js`,
     taskInstances: `${JS_DIR}/task_instances.js`,
     tiLog: `${JS_DIR}/ti_log.js`,
+    toggleTheme: `${JS_DIR}/toggle_theme.js`,
     grid: `${JS_DIR}/dag/index.tsx`,
     clusterActivity: `${JS_DIR}/cluster-activity/index.tsx`,
-    datasets: `${JS_DIR}/datasets/index.tsx`,
-    calendar: [`${CSS_DIR}/calendar.css`, `${JS_DIR}/calendar.js`],
-    durationChart: `${JS_DIR}/duration_chart.js`,
+    assets: `${JS_DIR}/assets/index.tsx`,
     trigger: `${JS_DIR}/trigger.js`,
     variableEdit: `${JS_DIR}/variable_edit.js`,
   },
@@ -100,14 +98,6 @@ const config = {
   },
   module: {
     rules: [
-      {
-        test: /datatables\.net.*/,
-        use: [
-          {
-            loader: "imports-loader?define=>false",
-          },
-        ],
-      },
       {
         test: /\.(js|jsx|tsx|ts)$/,
         exclude: /node_modules/,
@@ -205,10 +195,6 @@ const config = {
     new CopyWebpackPlugin({
       patterns: [
         {
-          from: "node_modules/nvd3/build/*.min.*",
-          flatten: true,
-        },
-        {
           from: "node_modules/d3/d3.min.*",
           flatten: true,
         },
@@ -225,20 +211,17 @@ const config = {
           to: "d3-tip.js",
           flatten: true,
         },
-        {
-          from: "node_modules/bootstrap-3-typeahead/*min.*",
-          flatten: true,
-        },
-        {
-          from: "node_modules/datatables.net/**/**.min.*",
-          flatten: true,
-        },
-        {
-          from: "node_modules/datatables.net-bs/**/**.min.*",
-          flatten: true,
-        },
+
         {
           from: "node_modules/eonasdan-bootstrap-datetimepicker/build/css/bootstrap-datetimepicker.min.css",
+          flatten: true,
+        },
+        {
+          from: "node_modules/jquery-ui/dist/jquery-ui.min.js",
+          flatten: true,
+        },
+        {
+          from: "node_modules/jquery-ui/dist/themes/base/jquery-ui.min.css",
           flatten: true,
         },
         {
@@ -277,7 +260,7 @@ const config = {
     }),
     new LicensePlugin({
       additionalFiles: {
-        "../../../../licenses/LICENSES-ui.txt": formatLicenses,
+        "../../../../3rd-party-licenses/LICENSES-ui.txt": formatLicenses,
       },
       unacceptableLicenseTest: (licenseIdentifier) =>
         [

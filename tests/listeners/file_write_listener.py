@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 
-from airflow.cli.commands.task_command import TaskCommandMarker
+from airflow.cli.commands.remote_commands.task_command import TaskCommandMarker
 from airflow.listeners import hookimpl
 
 log = logging.getLogger(__name__)
@@ -42,7 +42,9 @@ class FileWriteListener:
         self.write("on_task_instance_success")
 
     @hookimpl
-    def on_task_instance_failed(self, previous_state, task_instance, session):
+    def on_task_instance_failed(
+        self, previous_state, task_instance, error: None | str | BaseException, session
+    ):
         self.write("on_task_instance_failed")
 
     @hookimpl

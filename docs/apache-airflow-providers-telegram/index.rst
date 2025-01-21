@@ -19,16 +19,26 @@
 ``apache-airflow-providers-telegram``
 =====================================
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Guides
 
     Operators <operators>
+    Connection types <connections>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
@@ -36,15 +46,17 @@ Content
 
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
-    System Tests <_api/tests/system/providers/telegram/index>
+    System Tests <_api/tests/system/telegram/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
-    Example DAGs <https://github.com/apache/airflow/tree/providers-telegram/|version|/tests/system/providers/telegram>
+    Example DAGs <https://github.com/apache/airflow/tree/providers-telegram/|version|/providers/tests/system/telegram>
     PyPI Repository <https://pypi.org/project/apache-airflow-providers-telegram/>
     Installing from sources <installing-providers-from-sources>
 
@@ -52,43 +64,42 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-telegram
+apache-airflow-providers-telegram package
 ------------------------------------------------------
 
 `Telegram <https://telegram.org/>`__
 
 
-Release: 4.1.0
+Release: 4.7.0
 
 Provider package
 ----------------
 
-This is a provider package for ``telegram`` provider. All classes for this provider package
-are in ``airflow.providers.telegram`` python package.
+This package is for the ``telegram`` provider.
+All classes for this package are included in the ``airflow.providers.telegram`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-telegram``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-telegram``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
 =======================  ==================
 PIP package              Version required
 =======================  ==================
-``apache-airflow``       ``>=2.4.0``
-``python-telegram-bot``  ``>=20.0.0``
+``apache-airflow``       ``>=2.9.0``
+``python-telegram-bot``  ``>=20.2``
 =======================  ==================
-
-.. include:: ../../airflow/providers/telegram/CHANGELOG.rst

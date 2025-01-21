@@ -18,18 +18,21 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Sequence
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
-import jinja2
-
-from airflow.template.templater import Templater
-from airflow.utils.context import Context, context_merge
+from airflow.sdk.definitions._internal.templater import Templater
+from airflow.utils.context import context_merge
+from airflow.utils.log.logging_mixin import LoggingMixin
 
 if TYPE_CHECKING:
+    import jinja2
+
     from airflow import DAG
+    from airflow.sdk.definitions.context import Context
 
 
-class BaseNotifier(Templater):
+class BaseNotifier(LoggingMixin, Templater):
     """BaseNotifier class for sending notifications."""
 
     template_fields: Sequence[str] = ()
@@ -58,7 +61,8 @@ class BaseNotifier(Templater):
         context: Context,
         jinja_env: jinja2.Environment | None = None,
     ) -> None:
-        """Template all attributes listed in *self.template_fields*.
+        """
+        Template all attributes listed in *self.template_fields*.
 
         This mutates the attributes in-place and is irreversible.
 
@@ -73,19 +77,29 @@ class BaseNotifier(Templater):
     @abstractmethod
     def notify(self, context: Context) -> None:
         """
-        Sends a notification.
+        Send a notification.
 
         :param context: The airflow context
         """
         ...
 
-    def __call__(self, context: Context) -> None:
+    def __call__(self, *args) -> None:
         """
         Send a notification.
 
         :param context: The airflow context
         """
-        context = self._update_context(context)
+        if len(args) == 1:
+            context = args[0]
+        else:
+            context = {
+                "dag": args[0],
+                "task_list": args[1],
+                "blocking_task_list": args[2],
+                "blocking_tis": args[3],
+            }
+
+        self._update_context(context)
         self.render_template_fields(context)
         try:
             self.notify(context)

@@ -25,7 +25,7 @@ document editor, file sharing mechanisms.
 Prerequisite Tasks
 ^^^^^^^^^^^^^^^^^^
 
-.. include::/operators/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 .. _howto/operator:GoogleDriveToLocalOperator:
 
@@ -38,7 +38,7 @@ data from Google Drive to local filesystem.
 
 Below is an example of using this operator to download file from Google Drive to Local Filesystem.
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/transfers/example_gdrive_to_local.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/transfers/example_gdrive_to_local.py
     :language: python
     :dedent: 4
     :start-after: [START download_from_gdrive_to_local]

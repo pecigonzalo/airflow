@@ -19,10 +19,10 @@
 
 {% extends base_template %}
 {% from 'appbuilder/loading_dots.html' import loading_dots %}
-{% from 'airflow/dataset_next_run_modal.html' import dataset_next_run_modal %}
+{% from 'airflow/asset_next_run_modal.html' import asset_next_run_modal %}
 {% from 'airflow/_messages.html' import show_message %}
 
-{%- macro sortable_column(display_name, attribute_name) -%}
+{%- macro sortable_column(dag_display_name, attribute_name) -%}
   {% set curr_ordering_direction = (request.args.get('sorting_direction', 'desc')) %}
   {% set new_ordering_direction = ('asc' if (request.args.get('sorting_key') != attribute_name or curr_ordering_direction == 'desc') else 'desc') %}
   <a href="{{ url_for('Airflow.index',
@@ -36,9 +36,9 @@
      role="tooltip"
      title="Sort by {{ new_ordering_direction }} {{ attribute_name }}."
   >
-    {{ display_name }}
+    {{ dag_display_name }}
 
-    <span class="material-icons" aria-hidden="true" aria-describedby="sorting-tip-{{ display_name }}">
+    <span class="material-icons" aria-hidden="true" aria-describedby="sorting-tip-{{ dag_display_name }}">
       {% if curr_ordering_direction == 'desc' and request.args.get('sorting_key') == attribute_name %}
         expand_more
       {% elif curr_ordering_direction == 'asc' and request.args.get('sorting_key') == attribute_name %}
@@ -69,9 +69,9 @@
   <meta name="dag_stats_url" content="{{ url_for('Airflow.dag_stats') }}">
   <meta name="task_stats_url" content="{{ url_for('Airflow.task_stats') }}">
   <meta name="grid_url" content="{{ url_for('Airflow.grid', dag_id='__DAG_ID__') }}">
-  <meta name="datasets_url" content="{{ url_for('Airflow.datasets') }}">
-  <meta name="next_run_datasets_summary_url" content="{{ url_for('Airflow.next_run_datasets_summary') }}">
-  <meta name="next_run_datasets_url" content="{{ url_for('Airflow.next_run_datasets', dag_id='__DAG_ID__') }}">
+  <meta name="assets_url" content="{{ url_for('Airflow.assets') }}">
+  <meta name="next_run_assets_summary_url" content="{{ url_for('Airflow.next_run_assets_summary') }}">
+  <meta name="next_run_assets_url" content="{{ url_for('Airflow.next_run_assets', dag_id='__DAG_ID__') }}">
 {% endblock %}
 
 {% block head_css %}
@@ -110,19 +110,13 @@
     {% call show_message(category='warning', dismissible=false) %}
       Do not use <b>SQLite</b> as metadata DB in production &#8211; it should only be used for dev/testing.
       We recommend using Postgres or MySQL.
-      <a href={{ get_docs_url("howto/set-up-database.html") }}><b>Click here</b></a> for more information.
+      <a href={{ get_docs_url("howto/set-up-database.html") }} target="_blank" rel="noopener noreferrer"><b>Click here</b></a> for more information.
     {% endcall %}
   {% endif %}
   {% if production_executor_warning | default(false) %}
     {% call show_message(category='warning', dismissible=false) %}
       Do not use the <b>{{ production_executor_warning }}</b> in production.
-      <a href={{ get_docs_url("executor/index.html") }}><b>Click here</b></a> for more information.
-    {% endcall %}
-  {% endif %}
-  {% if otel_on | default(false) %}
-    {% call show_message(category='warning', dismissible=false) %}
-      OpenTelemetry support is experimental. <a href="https://github.com/apache/airflow/blob/main/BREEZE.rst#running-breeze-with-an-opentelemetry-metrics-stack">
-        <b>Click here</b></a> for more information.
+      <a href={{ get_docs_url("executor/index.html") }}  target="_blank" rel="noopener noreferrer"><b>Click here</b></a> for more information.
     {% endcall %}
   {% endif %}
 {% endblock %}
@@ -133,27 +127,27 @@
     <div class="dags-table-header">
       <div class="form-group btn-group">
         <a
-          href="{{ url_for('Airflow.index', status='all', search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
+          href="{{ url_for('Airflow.index', status='all', lastrun=request.args.get('lastrun', None), search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
           class="btn {{ 'btn-primary' if status_filter == 'all' else 'btn-default' }}"
           title="Show active and paused DAGs">All <span class="badge">{{ "{:,}".format(status_count_all) }}</span></a>
         <a
-          href="{{ url_for('Airflow.index', status='active', search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
+          href="{{ url_for('Airflow.index', status='active', lastrun=request.args.get('lastrun', None), search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
           class="btn {{ 'btn-primary' if status_filter == 'active' else 'btn-default' }}"
           title="Show only active DAGs">Active <span class="badge">{{ "{:,}".format(status_count_active) }}</span></a>
         <a
-          href="{{ url_for('Airflow.index', status='paused', search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
+          href="{{ url_for('Airflow.index', status='paused', lastrun=request.args.get('lastrun', None), search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
           class="btn {{ 'btn-primary' if status_filter == 'paused' else 'btn-default' }}"
           title="Show only paused DAGs">Paused <span class="badge">{{ "{:,}".format(status_count_paused) }}</span></a>
       </div>
       <div class="form-group btn-group p-2">
         <a
-          href="{{ url_for('Airflow.index', status='running', search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
-          class="btn {{ 'btn-primary' if status_filter == 'running' else 'btn-default' }}"
-          title="Show currently running DAG runs">Running <span class="badge">{{ "{:,}".format(status_count_running) }}</span></a>
+          href="{{ url_for('Airflow.index', lastrun='reset_filter' if lastrun_filter == 'running' else 'running', status=request.args.get('status', None), search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
+          class="btn {{ 'btn-primary' if lastrun_filter == 'running' else 'btn-default' }}"
+          title="Show currently running DAG runs">Running <span class="badge">{{ "{:,}".format(lastrun_count_running) }}</span></a>
         <a
-          href="{{ url_for('Airflow.index', status='failed', search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
-          class="btn {{ 'btn-primary' if status_filter == 'failed' else 'btn-default' }}"
-          title="Show DAGs with failed latest DAG run">Failed <span class="badge">{{ "{:,}".format(status_count_failed) }}</span></a>
+          href="{{ url_for('Airflow.index', lastrun='reset_filter' if lastrun_filter == 'failed' else 'failed', status=request.args.get('status', None), search=request.args.get('search', None), tags=request.args.getlist('tags', None)) }}"
+          class="btn {{ 'btn-primary' if lastrun_filter == 'failed' else 'btn-default' }}"
+          title="Show DAGs with failed latest DAG run">Failed <span class="badge">{{ "{:,}".format(lastrun_count_failed) }}</span></a>
       </div>
       <div style="min-width: 200px; padding: 0 10px;">
         <form id="tags_form">
@@ -221,7 +215,7 @@
           </th>
           <th style="width:180px;">{{ sortable_column("Next Run", "next_dagrun") }}
             <span class="material-icons text-muted js-tooltip" aria-hidden="true"
-                  title="Logical Date/Time interval of the next DAG Run, or for dataset triggered DAGs, how many datasets have been updated since the last DAG Run.">info</span>
+                  title="Logical Date/Time interval of the next DAG Run, or for asset triggered DAGs, how many assets have been updated since the last DAG Run.">info</span>
           </th>
           <th>Recent Tasks
             <span class="material-icons text-muted js-tooltip" aria-hidden="true"
@@ -257,12 +251,12 @@
             <td>
               <a href="{{ url_for('Airflow.'+ dag.get_default_view(), dag_id=dag.dag_id) }}"
                  title="{{ dag.description[0:80] + '…' if dag.description and dag.description|length > 80 else dag.description|default('', true) }}">
-                <strong>{{ dag.dag_id }}</strong>
+                <strong title="{{ dag.dag_id }}">{{ dag.dag_display_name }}</strong>
               </a>
               <div>
                 {% for tag in dag.tags | sort(attribute='name') %}
                   <a class="label label-info"
-                     href="?tags={{ tag.name }}"
+                     href="?tags={{ tag.name | urlencode }}"
                      style="margin: 6px 6px 0 0;">
                     {{ tag.name }}
                   </a>
@@ -273,7 +267,7 @@
               {% for owner in dag.owners.split(",") %}
                 <a class="label label-default"
                  {% if owner_links and owner.strip() in owner_links.get(dag.dag_id, {}) %}
-                   href="{{ owner_links[dag.dag_id].get(owner.strip()) }}" target="_blank"
+                   href="{{ owner_links[dag.dag_id].get(owner.strip()) }}" target="_blank" rel="noopener noreferrer"
                  {% else %}
                    href="?search={{ owner | trim }}"
                  {% endif %}
@@ -290,7 +284,7 @@
               <a class="label label-default schedule"
                  href="{{ url_for('DagRunModelView.list') }}?_flt_3_dag_id={{ dag.dag_id }}"
                  data-dag-id="{{ dag.dag_id }}">
-                {{ dag.schedule_interval }}
+                {{ dag.timetable_summary }}
               </a>
               {% if dag is defined and dag.timetable_description %}
                 <span class="material-icons text-muted js-tooltip" aria-hidden="true"
@@ -310,31 +304,31 @@
                     info
                   </span>
             </td>
-            <td class="text-nowrap {{ 'js-dataset-triggered' if dag.dag_id in dataset_triggered_next_run_info }}">
-              {% if dag.dag_id in dataset_triggered_next_run_info %}
-                {%- with ds_info = dataset_triggered_next_run_info[dag.dag_id] -%}
+            <td class="text-nowrap {{ 'js-asset-triggered' if dag.dag_id in asset_triggered_next_run_info }}">
+              {% if dag.dag_id in asset_triggered_next_run_info %}
+                {%- with asset_info = asset_triggered_next_run_info[dag.dag_id] -%}
                   <span
                     data-dag-id="{{ dag.dag_id }}"
-                    class="js-tooltip js-next-dataset-run-tooltip"
-                    title="Click to see dataset details."
+                    class="js-tooltip js-next-asset-run-tooltip"
+                    title="Click to see asset details."
                     data-html="true"
-                    data-uri="{{ ds_info.uri }}"
+                    data-uri="{{ asset_info.uri }}"
                   >
                     <div
-                      class="label label-default next-dataset-triggered"
+                      class="label label-default next-asset-triggered"
                       data-dag-id="{{ dag.dag_id }}"
-                      data-uri="{{ ds_info.uri }}"
+                      data-uri="{{ asset_info.uri }}"
                       data-summary="
-                      {%- if ds_info.total == 1 -%}
-                      On {{ ds_info.uri }}
+                      {%- if asset_info.total == 1 -%}
+                      On {{ asset_info.uri }}
                       {%- else -%}
-                      {{ ds_info.ready }} of {{ ds_info.total }} datasets updated
+                      {{ asset_info.ready }} of {{ asset_info.total }} assets updated
                       {%- endif -%}"
                     >
-                      {% if ds_info.total == 1 -%}
-                        On {{ ds_info.uri[0:40] + '…' if ds_info.uri and ds_info.uri|length > 40 else ds_info.uri|default('', true) }}
+                      {% if asset_info.total == 1 -%}
+                        On {{ asset_info.uri[0:40] + '…' if asset_info.uri and asset_info.uri|length > 40 else asset_info.uri|default('', true) }}
                       {%- else -%}
-                        {{ ds_info.ready }} of {{ ds_info.total }} datasets updated
+                        {{ asset_info.ready }} of {{ asset_info.total }} assets updated
                       {%- endif %}
                     </div>
                   </span>
@@ -364,13 +358,39 @@
               <div class="btn-group">
                 {# Use dag_id instead of dag.dag_id, because the DAG might not exist in the webserver's DagBag #}
                 {% if dag %}
-                  <a href="{{ url_for('Airflow.trigger', dag_id=dag.dag_id, redirect_url=url_for(request.endpoint), unpause=True) }}"
-                    title="Trigger&nbsp;DAG"
+                {% if show_trigger_form_if_no_params %}
+                <div class="dropdown">
+                    <a aria-label="Trigger DAG"
+                       class="btn btn-sm btn-default btn-icon-only{{ ' disabled' if not dag.can_trigger }} trigger-dropdown-btn"
+                       data-toggle="dropdown">
+                      <span class="material-icons" aria-hidden="true">play_arrow</span>
+                    </a>
+                    <ul class="dropdown-menu trigger-dropdown-menu">
+                      <li>
+                        <form method="POST" action="{{ url_for('Airflow.trigger', dag_id=dag.dag_id, redirect_url=url_for(request.endpoint)) }}">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="dag_id" value="{{ dag.dag_id }}">
+                          <input type="hidden" name="unpause" value="True">
+                          <input type="hidden" name="conf" value="{}">
+                          <button type="submit" class="dropdown-form-btn">Trigger DAG</button>
+                        </form>
+                      </li>
+                      <li><a href="{{ url_for('Airflow.trigger', dag_id=dag.dag_id, redirect_url=url_for(request.endpoint)) }}">Trigger DAG w/ config</a></li>
+                    </ul>
+                  </div>
+                {% else %}
+                  <a href="{{ url_for('Airflow.trigger', dag_id=dag.dag_id, redirect_url=url_for(request.endpoint)) }}"
+                  onclick="return triggerDag(this, '{{ dag.dag_id }}')" title="Trigger&nbsp;DAG"
                     aria-label="Trigger DAG"
                     class="btn btn-sm btn-default btn-icon-only{{ ' disabled' if not dag.can_trigger }} trigger-dropdown-btn">
                     <span class="material-icons" aria-hidden="true">play_arrow</span>
                   </a>
-                  <a href="{{ url_for('Airflow.delete', dag_id=dag.dag_id, redirect_url=url_for(request.endpoint)) }}"
+                {% endif %}
+                <a href="{{ url_for('Airflow.parse_dag', file_token=file_tokens[dag.dag_id], redirect_url=url_for(request.endpoint)) }}" title="Reparse&nbsp;DAG" aria-label="Reparse DAG"
+                    class="btn btn-sm btn-default btn-icon-only{{ ' disabled' if not dag.can_edit }}">
+                    <span class="material-icons">restore_page</span>
+                </a>
+                <a href="{{ url_for('Airflow.delete', dag_id=dag.dag_id, redirect_url=url_for(request.endpoint)) }}"
                     onclick="return confirmDeleteDag(this, '{{ dag.dag_id }}')" title="Delete&nbsp;DAG"
                     aria-label="Delete DAG"
                     class="btn btn-sm btn-default btn-icon-only{{ ' disabled' if not dag.can_delete }}">
@@ -440,8 +460,8 @@
     <div class="tooltip-arrow"></div>
     <div class="tooltip-inner"></div>
   </div>
-  <!-- Modal for dataset-triggered next run -->
-  {{ dataset_next_run_modal(id='dataset-next-run-modal') }}
+  <!-- Modal for asset-triggered next run -->
+  {{ asset_next_run_modal(id='asset-next-run-modal') }}
 {% endblock %}
 
 {% block tail %}
@@ -460,6 +480,11 @@
         This cannot be undone.`)) {
         postAsForm(link.href, {});
       }
+      return false;
+    }
+
+    function triggerDag(link, dagId) {
+      postAsForm(link.href, {});
       return false;
     }
   </script>

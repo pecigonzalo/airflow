@@ -16,15 +16,20 @@
 # under the License.
 from __future__ import annotations
 
+import pytest
+
 from airflow.api_connexion.schemas.error_schema import (
     ImportErrorCollection,
     import_error_collection_schema,
     import_error_schema,
 )
-from airflow.models.errors import ImportError
 from airflow.utils import timezone
 from airflow.utils.session import provide_session
-from tests.test_utils.db import clear_db_import_errors
+
+from tests_common.test_utils.compat import ParseImportError
+from tests_common.test_utils.db import clear_db_import_errors
+
+pytestmark = pytest.mark.db_test
 
 
 class TestErrorSchemaBase:
@@ -39,7 +44,7 @@ class TestErrorSchemaBase:
 class TestErrorSchema(TestErrorSchemaBase):
     @provide_session
     def test_serialize(self, session):
-        import_error = ImportError(
+        import_error = ParseImportError(
             filename="lorem.py",
             stacktrace="Lorem Ipsum",
             timestamp=timezone.parse(self.timestamp, timezone="UTC"),
@@ -48,19 +53,20 @@ class TestErrorSchema(TestErrorSchemaBase):
         session.commit()
         serialized_data = import_error_schema.dump(import_error)
         serialized_data["import_error_id"] = 1
-        assert {
+        assert serialized_data == {
             "filename": "lorem.py",
+            "bundle_name": None,
             "import_error_id": 1,
             "stack_trace": "Lorem Ipsum",
             "timestamp": "2020-06-10T12:02:44+00:00",
-        } == serialized_data
+        }
 
 
 class TestErrorCollectionSchema(TestErrorSchemaBase):
     @provide_session
     def test_serialize(self, session):
         import_error = [
-            ImportError(
+            ParseImportError(
                 filename="Lorem_ipsum.py",
                 stacktrace="Lorem ipsum",
                 timestamp=timezone.parse(self.timestamp, timezone="UTC"),
@@ -69,7 +75,7 @@ class TestErrorCollectionSchema(TestErrorSchemaBase):
         ]
         session.add_all(import_error)
         session.commit()
-        query = session.query(ImportError)
+        query = session.query(ParseImportError)
         query_list = query.all()
         serialized_data = import_error_collection_schema.dump(
             ImportErrorCollection(import_errors=query_list, total_entries=2)
@@ -77,20 +83,22 @@ class TestErrorCollectionSchema(TestErrorSchemaBase):
         # To maintain consistency in the key sequence across the db in tests
         serialized_data["import_errors"][0]["import_error_id"] = 1
         serialized_data["import_errors"][1]["import_error_id"] = 2
-        assert {
+        assert serialized_data == {
             "import_errors": [
                 {
                     "filename": "Lorem_ipsum.py",
+                    "bundle_name": None,
                     "import_error_id": 1,
                     "stack_trace": "Lorem ipsum",
                     "timestamp": "2020-06-10T12:02:44+00:00",
                 },
                 {
                     "filename": "Lorem_ipsum.py",
+                    "bundle_name": None,
                     "import_error_id": 2,
                     "stack_trace": "Lorem ipsum",
                     "timestamp": "2020-06-10T12:02:44+00:00",
                 },
             ],
             "total_entries": 2,
-        } == serialized_data
+        }

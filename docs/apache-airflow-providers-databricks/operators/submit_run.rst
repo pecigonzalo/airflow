@@ -61,6 +61,8 @@ one named parameter for each top level parameter in the ``runs/submit`` endpoint
   * ``new_cluster`` - specs for a new cluster on which this task will be run
   * ``existing_cluster_id`` - ID for existing cluster on which to run this task
 
+* ``pipeline_task`` - may refer to either a ``pipeline_id`` or ``pipeline_name``
+
 In the case where both the json parameter **AND** the named parameters
 are provided, they will be merged together. If there are conflicts during the merge,
 the named parameters will take precedence and override the top level ``json`` keys.
@@ -111,7 +113,7 @@ Specifying parameters as JSON
 
 An example usage of the DatabricksSubmitRunOperator is as follows:
 
-.. exampleinclude:: /../../tests/system/providers/databricks/example_databricks.py
+.. exampleinclude:: /../../providers/tests/system/databricks/example_databricks.py
     :language: python
     :start-after: [START howto_operator_databricks_json]
     :end-before: [END howto_operator_databricks_json]
@@ -121,7 +123,7 @@ Using named parameters
 
 You can also use named parameters to initialize the operator and run the job.
 
-.. exampleinclude:: /../../tests/system/providers/databricks/example_databricks.py
+.. exampleinclude:: /../../providers/tests/system/databricks/example_databricks.py
     :language: python
     :start-after: [START howto_operator_databricks_named]
     :end-before: [END howto_operator_databricks_named]

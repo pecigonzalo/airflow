@@ -15,6 +15,10 @@
     specific language governing permissions and limitations
     under the License.
 
+.. spelling::
+
+    ListTransferJobsAsyncPager
+    StorageTransferServiceAsyncClient
 
 
 Google Cloud Transfer Service Operators
@@ -23,7 +27,7 @@ Google Cloud Transfer Service Operators
 Prerequisite Tasks
 ------------------
 
-.. include::/operators/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 .. _howto/operator:CloudDataTransferServiceCreateJobOperator:
 
@@ -58,17 +62,17 @@ For parameter definition, take a look at
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/storage_transfer/example_cloud_storage_transfer_service_gcp.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_gcp.py
       :language: python
       :start-after: [START howto_operator_gcp_transfer_create_job_body_gcp]
       :end-before: [END howto_operator_gcp_transfer_create_job_body_gcp]
 
-.. exampleinclude:: /../../airflow/providers/google/cloud/example_dags/example_cloud_storage_transfer_service_aws.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_aws.py
       :language: python
       :start-after: [START howto_operator_gcp_transfer_create_job_body_aws]
       :end-before: [END howto_operator_gcp_transfer_create_job_body_aws]
 
-.. exampleinclude:: /../../airflow/providers/google/cloud/example_dags/example_cloud_storage_transfer_service_aws.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_aws.py
       :language: python
       :dedent: 4
       :start-after: [START howto_operator_gcp_transfer_create_job]
@@ -77,7 +81,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: /../../airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
     :language: python
     :dedent: 4
     :start-after: [START gcp_transfer_job_create_template_fields]
@@ -103,7 +107,7 @@ For parameter definition, take a look at
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: /../../airflow/providers/google/cloud/example_dags/example_cloud_storage_transfer_service_aws.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_aws.py
       :language: python
       :dedent: 4
       :start-after: [START howto_operator_gcp_transfer_delete_job]
@@ -112,7 +116,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: /../../airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
     :language: python
     :dedent: 4
     :start-after: [START gcp_transfer_job_delete_template_fields]
@@ -126,6 +130,41 @@ See `Google Cloud Transfer Service - REST Resource: transferJobs - Status
 
 .. _howto/operator:CloudDataTransferServiceUpdateJobOperator:
 
+CloudDataTransferServiceRunJobOperator
+-----------------------------------------
+
+Runs a transfer job.
+
+For parameter definition, take a look at
+:class:`~airflow.providers.google.cloud.operators.cloud_storage_transfer_service.CloudDataTransferServiceRunJobOperator`.
+
+
+Using the operator
+""""""""""""""""""
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_gcp.py
+      :language: python
+      :dedent: 4
+      :start-after: [START howto_operator_gcp_transfer_run_job]
+      :end-before: [END howto_operator_gcp_transfer_run_job]
+
+Templating
+""""""""""
+
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+    :language: python
+    :dedent: 4
+    :start-after: [START gcp_transfer_job_run_template_fields]
+    :end-before: [END gcp_transfer_job_run_template_fields]
+
+More information
+""""""""""""""""
+
+See `Google Cloud Transfer Service - REST Resource: transferJobs - Run
+<https://cloud.google.com/storage-transfer/docs/reference/rest/v1/transferJobs/run>`_
+
+.. _howto/operator:CloudDataTransferServiceRunJobOperator:
+
 CloudDataTransferServiceUpdateJobOperator
 -----------------------------------------
 
@@ -138,12 +177,12 @@ For parameter definition, take a look at
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/storage_transfer/example_cloud_storage_transfer_service_gcp.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_gcp.py
       :language: python
       :start-after: [START howto_operator_gcp_transfer_update_job_body]
       :end-before: [END howto_operator_gcp_transfer_update_job_body]
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/storage_transfer/example_cloud_storage_transfer_service_gcp.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_gcp.py
       :language: python
       :dedent: 4
       :start-after: [START howto_operator_gcp_transfer_update_job]
@@ -152,7 +191,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: /../../airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
     :language: python
     :dedent: 4
     :start-after: [START gcp_transfer_job_update_template_fields]
@@ -177,7 +216,7 @@ For parameter definition, take a look at
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: /../../airflow/providers/google/cloud/example_dags/example_cloud_storage_transfer_service_aws.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_aws.py
       :language: python
       :dedent: 4
       :start-after: [START howto_operator_gcp_transfer_cancel_operation]
@@ -186,7 +225,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: /../../airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
     :language: python
     :dedent: 4
     :start-after: [START gcp_transfer_operation_cancel_template_fields]
@@ -213,7 +252,7 @@ For parameter definition, take a look at
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: /../../airflow/providers/google/cloud/example_dags/example_cloud_storage_transfer_service_aws.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_aws.py
       :language: python
       :dedent: 4
       :start-after: [START howto_operator_gcp_transfer_get_operation]
@@ -222,7 +261,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: /../../airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
     :language: python
     :dedent: 4
     :start-after: [START gcp_transfer_operation_get_template_fields]
@@ -248,7 +287,7 @@ For parameter definition, take a look at
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: /../../airflow/providers/google/cloud/example_dags/example_cloud_storage_transfer_service_aws.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_aws.py
       :language: python
       :dedent: 4
       :start-after: [START howto_operator_gcp_transfer_list_operations]
@@ -257,7 +296,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: /../../airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
     :language: python
     :dedent: 4
     :start-after: [START gcp_transfer_operations_list_template_fields]
@@ -282,7 +321,7 @@ For parameter definition, take a look at
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: /../../airflow/providers/google/cloud/example_dags/example_cloud_storage_transfer_service_aws.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_aws.py
       :language: python
       :dedent: 4
       :start-after: [START howto_operator_gcp_transfer_pause_operation]
@@ -291,7 +330,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: /../../airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
     :language: python
     :dedent: 4
     :start-after: [START gcp_transfer_operation_pause_template_fields]
@@ -316,7 +355,7 @@ For parameter definition, take a look at
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: /../../airflow/providers/google/cloud/example_dags/example_cloud_storage_transfer_service_aws.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_aws.py
       :language: python
       :dedent: 4
       :start-after: [START howto_operator_gcp_transfer_resume_operation]
@@ -325,7 +364,7 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: /../../airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
     :language: python
     :dedent: 4
     :start-after: [START gcp_transfer_operation_resume_template_fields]
@@ -351,7 +390,7 @@ For parameter definition, take a look at
 Using the operator
 """"""""""""""""""
 
-.. exampleinclude:: /../../airflow/providers/google/cloud/example_dags/example_cloud_storage_transfer_service_aws.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_aws.py
       :language: python
       :dedent: 4
       :start-after: [START howto_operator_gcp_transfer_wait_operation]
@@ -360,11 +399,39 @@ Using the operator
 Templating
 """"""""""
 
-.. literalinclude:: /../../airflow/providers/google/cloud/sensors/cloud_storage_transfer_service.py
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/sensors/cloud_storage_transfer_service.py
     :language: python
     :dedent: 4
     :start-after: [START gcp_transfer_job_sensor_template_fields]
     :end-before: [END gcp_transfer_job_sensor_template_fields]
+
+.. _howto/operator:CloudDataTransferServiceGCSToGCSOperator:
+
+CloudDataTransferServiceGCSToGCSOperator
+-----------------------------------------------
+
+Copy data from one GCS bucket to another.
+
+For parameter definition, take a look at
+:class:`~airflow.providers.google.cloud.operators.cloud_storage_transfer_service.CloudDataTransferServiceGCSToGCSOperator`.
+
+Using the operator
+""""""""""""""""""
+
+.. exampleinclude:: /../../providers/tests/system/google/cloud/storage_transfer/example_cloud_storage_transfer_service_gcs_to_gcs.py
+      :language: python
+      :dedent: 4
+      :start-after: [START howto_operator_transfer_gcs_to_gcs]
+      :end-before: [END howto_operator_transfer_gcs_to_gcs]
+
+Templating
+""""""""""
+
+.. literalinclude:: /../../providers/src/airflow/providers/google/cloud/operators/cloud_storage_transfer_service.py
+    :language: python
+    :dedent: 4
+    :start-after: [START gcp_transfer_gcs_to_gcs_template_fields]
+    :end-before: [END gcp_transfer_gcs_to_gcs_template_fields]
 
 Reference
 ---------

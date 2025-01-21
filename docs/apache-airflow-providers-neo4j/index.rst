@@ -19,10 +19,18 @@
 ``apache-airflow-providers-neo4j``
 ==================================
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Guides
 
@@ -30,6 +38,7 @@ Content
     Operators <operators/neo4j>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
@@ -37,15 +46,17 @@ Content
 
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
-    System Tests <_api/tests/system/providers/neo4j/index>
+    System Tests <_api/tests/system/neo4j/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
-    Example DAGs <https://github.com/apache/airflow/tree/providers-neo4j/|version|/tests/system/providers/neo4j>
+    Example DAGs <https://github.com/apache/airflow/tree/providers-neo4j/|version|/providers/tests/system/neo4j>
     PyPI Repository <https://pypi.org/project/apache-airflow-providers-neo4j/>
     Installing from sources <installing-providers-from-sources>
 
@@ -53,43 +64,42 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-neo4j
+apache-airflow-providers-neo4j package
 ------------------------------------------------------
 
 `Neo4j <https://neo4j.com/>`__
 
 
-Release: 3.3.0
+Release: 3.8.0
 
 Provider package
 ----------------
 
-This is a provider package for ``neo4j`` provider. All classes for this provider package
-are in ``airflow.providers.neo4j`` python package.
+This package is for the ``neo4j`` provider.
+All classes for this package are included in the ``airflow.providers.neo4j`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-neo4j``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-neo4j``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
 ==================  ==================
 PIP package         Version required
 ==================  ==================
-``apache-airflow``  ``>=2.4.0``
+``apache-airflow``  ``>=2.9.0``
 ``neo4j``           ``>=4.2.1``
 ==================  ==================
-
-.. include:: ../../airflow/providers/neo4j/CHANGELOG.rst

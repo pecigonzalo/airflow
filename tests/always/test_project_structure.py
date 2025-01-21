@@ -21,75 +21,173 @@ import glob
 import itertools
 import mmap
 import os
+import pathlib
 
 import pytest
 
-ROOT_FOLDER = os.path.realpath(
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir, os.pardir)
-)
+ROOT_FOLDER = pathlib.Path(__file__).parents[2]
+PROVIDERS_SRC = ROOT_FOLDER.joinpath("providers", "src")
+PROVIDERS_TESTS = ROOT_FOLDER.joinpath("providers", "tests")
 
 
 class TestProjectStructure:
     def test_reference_to_providers_from_core(self):
-        for filename in glob.glob(f"{ROOT_FOLDER}/example_dags/**/*.py", recursive=True):
+        for filename in ROOT_FOLDER.glob("example_dags/**/*.py"):
             self.assert_file_not_contains(filename, "providers")
 
     def test_deprecated_packages(self):
-        path_pattern = f"{ROOT_FOLDER}/airflow/contrib/**/*.py"
-
-        for filename in glob.glob(path_pattern, recursive=True):
-            if filename.endswith("/__init__.py"):
+        for filename in ROOT_FOLDER.glob("airflow/contrib/**/*.py"):
+            if filename.name == "__init__.py":
                 self.assert_file_contains(filename, "This package is deprecated.")
             else:
                 self.assert_file_contains(filename, "This module is deprecated.")
 
-    def assert_file_not_contains(self, filename: str, pattern: str):
+    def assert_file_not_contains(self, filename: pathlib.Path, pattern: str):
         with open(filename, "rb", 0) as file, mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as content:
             if content.find(bytes(pattern, "utf-8")) != -1:
                 pytest.fail(f"File {filename} not contains pattern - {pattern}")
 
-    def assert_file_contains(self, filename: str, pattern: str):
+    def assert_file_contains(self, filename: pathlib.Path, pattern: str):
         with open(filename, "rb", 0) as file, mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as content:
             if content.find(bytes(pattern, "utf-8")) == -1:
                 pytest.fail(f"File {filename} contains illegal pattern - {pattern}")
 
     def test_providers_modules_should_have_tests(self):
         """
-        Assert every module in /airflow/providers has a corresponding test_ file in tests/airflow/providers.
+        Assert every module in /providers/src/airflow/providers has a corresponding test_ file in providers/providers.
         """
+        # The test below had a but for quite a while and we missed a lot of modules to have tess
+        # We should make sure that one goes to 0
+        OVERLOOKED_TESTS = [
+            "providers/tests/amazon/aws/executors/batch/test_boto_schema.py",
+            "providers/tests/amazon/aws/executors/batch/test_batch_executor_config.py",
+            "providers/tests/amazon/aws/executors/batch/test_utils.py",
+            "providers/tests/amazon/aws/executors/ecs/test_boto_schema.py",
+            "providers/tests/amazon/aws/executors/ecs/test_ecs_executor_config.py",
+            "providers/tests/amazon/aws/executors/ecs/test_utils.py",
+            "providers/tests/amazon/aws/executors/utils/test_base_config_keys.py",
+            "providers/tests/amazon/aws/operators/test_emr.py",
+            "providers/tests/amazon/aws/operators/test_sagemaker.py",
+            "providers/tests/amazon/aws/sensors/test_emr.py",
+            "providers/tests/amazon/aws/sensors/test_sagemaker.py",
+            "providers/tests/amazon/aws/test_exceptions.py",
+            "providers/tests/amazon/aws/triggers/test_step_function.py",
+            "providers/tests/amazon/aws/utils/test_rds.py",
+            "providers/tests/amazon/aws/utils/test_sagemaker.py",
+            "providers/tests/amazon/aws/waiters/test_base_waiter.py",
+            "providers/tests/apache/drill/operators/test_drill.py",
+            "providers/tests/apache/druid/operators/test_druid_check.py",
+            "providers/tests/apache/hdfs/hooks/test_hdfs.py",
+            "providers/tests/apache/hdfs/log/test_hdfs_task_handler.py",
+            "providers/tests/apache/hdfs/sensors/test_hdfs.py",
+            "providers/tests/apache/hive/plugins/test_hive.py",
+            "providers/tests/celery/executors/test_celery_executor_utils.py",
+            "providers/tests/celery/executors/test_default_celery.py",
+            "providers/tests/cloudant/test_cloudant_fake.py",
+            "providers/tests/cncf/kubernetes/executors/test_kubernetes_executor_types.py",
+            "providers/tests/cncf/kubernetes/executors/test_kubernetes_executor_utils.py",
+            "providers/tests/cncf/kubernetes/operators/test_kubernetes_pod.py",
+            "providers/tests/cncf/kubernetes/test_k8s_model.py",
+            "providers/tests/cncf/kubernetes/test_kube_client.py",
+            "providers/tests/cncf/kubernetes/test_kube_config.py",
+            "providers/tests/cncf/kubernetes/test_pod_generator_deprecated.py",
+            "providers/tests/cncf/kubernetes/test_pod_launcher_deprecated.py",
+            "providers/tests/cncf/kubernetes/test_python_kubernetes_script.py",
+            "providers/tests/cncf/kubernetes/test_secret.py",
+            "providers/tests/cncf/kubernetes/triggers/test_kubernetes_pod.py",
+            "providers/tests/cncf/kubernetes/utils/test_delete_from.py",
+            "providers/tests/cncf/kubernetes/utils/test_k8s_hashlib_wrapper.py",
+            "providers/tests/cncf/kubernetes/utils/test_xcom_sidecar.py",
+            "providers/tests/google/cloud/fs/test_gcs.py",
+            "providers/tests/google/cloud/links/test_automl.py",
+            "providers/tests/google/cloud/links/test_base.py",
+            "providers/tests/google/cloud/links/test_bigquery.py",
+            "providers/tests/google/cloud/links/test_bigquery_dts.py",
+            "providers/tests/google/cloud/links/test_bigtable.py",
+            "providers/tests/google/cloud/links/test_cloud_build.py",
+            "providers/tests/google/cloud/links/test_cloud_functions.py",
+            "providers/tests/google/cloud/links/test_cloud_memorystore.py",
+            "providers/tests/google/cloud/links/test_cloud_sql.py",
+            "providers/tests/google/cloud/links/test_cloud_storage_transfer.py",
+            "providers/tests/google/cloud/links/test_cloud_tasks.py",
+            "providers/tests/google/cloud/links/test_compute.py",
+            "providers/tests/google/cloud/links/test_data_loss_prevention.py",
+            "providers/tests/google/cloud/links/test_datacatalog.py",
+            "providers/tests/google/cloud/links/test_dataflow.py",
+            "providers/tests/google/cloud/links/test_dataform.py",
+            "providers/tests/google/cloud/links/test_datafusion.py",
+            "providers/tests/google/cloud/links/test_dataprep.py",
+            "providers/tests/google/cloud/links/test_dataproc.py",
+            "providers/tests/google/cloud/links/test_datastore.py",
+            "providers/tests/google/cloud/links/test_kubernetes_engine.py",
+            "providers/tests/google/cloud/links/test_life_sciences.py",
+            "providers/tests/google/cloud/links/test_mlengine.py",
+            "providers/tests/google/cloud/links/test_pubsub.py",
+            "providers/tests/google/cloud/links/test_spanner.py",
+            "providers/tests/google/cloud/links/test_stackdriver.py",
+            "providers/tests/google/cloud/links/test_vertex_ai.py",
+            "providers/tests/google/cloud/links/test_workflows.py",
+            "providers/tests/google/cloud/operators/vertex_ai/test_auto_ml.py",
+            "providers/tests/google/cloud/operators/vertex_ai/test_batch_prediction_job.py",
+            "providers/tests/google/cloud/operators/vertex_ai/test_custom_job.py",
+            "providers/tests/google/cloud/operators/vertex_ai/test_endpoint_service.py",
+            "providers/tests/google/cloud/operators/vertex_ai/test_hyperparameter_tuning_job.py",
+            "providers/tests/google/cloud/operators/vertex_ai/test_model_service.py",
+            "providers/tests/google/cloud/operators/vertex_ai/test_pipeline_job.py",
+            "providers/tests/google/cloud/transfers/test_bigquery_to_sql.py",
+            "providers/tests/google/cloud/transfers/test_presto_to_gcs.py",
+            "providers/tests/google/cloud/utils/test_bigquery.py",
+            "providers/tests/google/cloud/utils/test_bigquery_get_data.py",
+            "providers/tests/google/cloud/utils/test_dataform.py",
+            "providers/tests/google/common/links/test_storage.py",
+            "providers/tests/google/common/test_consts.py",
+            "providers/tests/google/test_go_module_utils.py",
+            "providers/tests/microsoft/azure/operators/test_adls.py",
+            "providers/tests/microsoft/azure/transfers/test_azure_blob_to_gcs.py",
+            "providers/tests/slack/notifications/test_slack_notifier.py",
+            "providers/tests/snowflake/triggers/test_snowflake_trigger.py",
+            "providers/tests/yandex/hooks/test_yandexcloud_dataproc.py",
+            "providers/tests/yandex/operators/test_yandexcloud_dataproc.py",
+            "providers/tests/fab/migrations/test_env.py",
+        ]
+
         # TODO: Should we extend this test to cover other directories?
-        modules_files = glob.glob(f"{ROOT_FOLDER}/airflow/providers/**/*.py", recursive=True)
+        modules_files = PROVIDERS_SRC.joinpath("airflow", "providers").glob("**/*.py")
 
-        # Make path relative
-        modules_files = (os.path.relpath(f, ROOT_FOLDER) for f in modules_files)
-        # Exclude example_dags
-        modules_files = (f for f in modules_files if "/example_dags/" not in f)
         # Exclude __init__.py
-        modules_files = (f for f in modules_files if not f.endswith("__init__.py"))
-        # Change airflow/ to tests/
-        expected_test_files = (
-            f'tests/{f.partition("/")[2]}' for f in modules_files if not f.endswith("__init__.py")
-        )
+        modules_files = filter(lambda f: f.name != "__init__.py", modules_files)
+        # Make path relative
+        modules_files = map(lambda f: f.relative_to(PROVIDERS_SRC / "airflow" / "providers"), modules_files)
+        # Exclude example_dags
+        modules_files = (f for f in modules_files if "example_dags" not in f.parts)
+        # Exclude _vendor
+        modules_files = (f for f in modules_files if "_vendor" not in f.parts)
+        # Exclude versions file
+        modules_files = (f for f in modules_files if "versions" not in f.parts)
+        # Change src/airflow/providers/ to tests/
+        test_folder = pathlib.Path("providers/tests")
         # Add test_ prefix to filename
-        expected_test_files = (
-            f'{f.rpartition("/")[0]}/test_{f.rpartition("/")[2]}'
-            for f in expected_test_files
-            if not f.endswith("__init__.py")
-        )
+        expected_test_files = (test_folder.joinpath(f.with_name("test_" + f.name)) for f in modules_files)
 
-        current_test_files = glob.glob(f"{ROOT_FOLDER}/tests/providers/**/*.py", recursive=True)
+        current_test_files = PROVIDERS_TESTS.glob("**/*.py")
         # Make path relative
         current_test_files = (os.path.relpath(f, ROOT_FOLDER) for f in current_test_files)
         # Exclude __init__.py
         current_test_files = (f for f in current_test_files if not f.endswith("__init__.py"))
 
         modules_files = set(modules_files)
-        expected_test_files = set(expected_test_files)
+        expected_test_files = set(expected_test_files) - set(OVERLOOKED_TESTS)
         current_test_files = set(current_test_files)
 
         missing_tests_files = expected_test_files - expected_test_files.intersection(current_test_files)
 
-        assert set() == missing_tests_files, "Detect missing tests in providers module"
+        assert set() == missing_tests_files, "Detect missing tests in providers module - please add tests"
+
+        added_test_files = current_test_files.intersection(OVERLOOKED_TESTS)
+        assert set() == added_test_files, (
+            "Detect added tests in providers module - please remove the tests "
+            "from OVERLOOKED_TESTS list above"
+        )
 
 
 def get_imports_from_file(filepath: str):
@@ -107,9 +205,9 @@ def get_imports_from_file(filepath: str):
     return import_names
 
 
-def filepath_to_module(filepath: str):
-    filepath = os.path.relpath(os.path.abspath(filepath), ROOT_FOLDER)
-    return filepath.replace("/", ".")[: -(len(".py"))]
+def filepath_to_module(path: pathlib.Path):
+    path = path.relative_to(PROVIDERS_SRC)
+    return path.as_posix().replace("/", ".")[: -(len(".py"))]
 
 
 def print_sorted(container: set, indent: str = "    ") -> None:
@@ -123,36 +221,32 @@ class ProjectStructureTest:
     CLASS_SUFFIXES = ["Operator", "Sensor"]
 
     def class_paths(self):
-        """Override this method if your classes are located under different paths"""
         for resource_type in self.CLASS_DIRS:
-            python_files = glob.glob(
-                f"{ROOT_FOLDER}/airflow/providers/{self.PROVIDER}/**/{resource_type}/**.py", recursive=True
+            python_files = PROVIDERS_SRC.glob(
+                f"airflow/providers/{self.PROVIDER}/**/{resource_type}/**/*.py",
             )
             # Make path relative
-            resource_files = (os.path.relpath(f, ROOT_FOLDER) for f in python_files)
-            resource_files = (f for f in resource_files if not f.endswith("__init__.py"))
+            resource_files = filter(lambda f: f.name != "__init__.py", python_files)
             yield from resource_files
 
     def list_of_classes(self):
         classes = {}
         for operator_file in self.class_paths():
-            operators_paths = self.get_classes_from_file(f"{ROOT_FOLDER}/{operator_file}")
+            operators_paths = self.get_classes_from_file(operator_file)
             classes.update(operators_paths)
         return classes
 
-    def get_classes_from_file(self, filepath: str):
+    def get_classes_from_file(self, filepath: pathlib.Path):
         with open(filepath) as py_file:
             content = py_file.read()
         doc_node = ast.parse(content, filepath)
         module = filepath_to_module(filepath)
         results: dict = {}
         for current_node in ast.walk(doc_node):
-            if not isinstance(current_node, ast.ClassDef):
-                continue
-            name = current_node.name
-            if not any(name.endswith(suffix) for suffix in self.CLASS_SUFFIXES):
-                continue
-            results[f"{module}.{name}"] = current_node
+            if isinstance(current_node, ast.ClassDef) and current_node.name.endswith(
+                tuple(self.CLASS_SUFFIXES)
+            ):
+                results[f"{module}.{current_node.name}"] = current_node
         return results
 
 
@@ -172,11 +266,12 @@ class ExampleCoverageTest(ProjectStructureTest):
         """Override this method if your example dags are located elsewhere"""
         # old_design:
         yield from glob.glob(
-            f"{ROOT_FOLDER}/airflow/providers/{self.PROVIDER}/**/example_dags/example_*.py", recursive=True
+            f"{ROOT_FOLDER}/providers/src/airflow/providers/{self.PROVIDER}/**/example_dags/example_*.py",
+            recursive=True,
         )
         # new_design:
         yield from glob.glob(
-            f"{ROOT_FOLDER}/tests/system/providers/{self.PROVIDER}/**/example_*.py", recursive=True
+            f"{ROOT_FOLDER}/providers/tests/system/{self.PROVIDER}/**/example_*.py", recursive=True
         )
 
     def test_missing_examples(self):
@@ -185,7 +280,7 @@ class ExampleCoverageTest(ProjectStructureTest):
         are used in any of the example dags
         """
         classes = self.list_of_classes()
-        assert 0 != len(classes), "Failed to retrieve operators, override class_paths if needed"
+        assert len(classes) != 0, "Failed to retrieve operators, override class_paths if needed"
         classes = set(classes.keys())
         for example in self.example_paths():
             classes -= get_imports_from_file(example)
@@ -253,19 +348,39 @@ class TestGoogleProviderProjectStructure(ExampleCoverageTest, AssetsCoverageTest
         ".CloudDataTransferServiceS3ToGCSOperator",
         "airflow.providers.google.cloud.operators.cloud_storage_transfer_service"
         ".CloudDataTransferServiceGCSToGCSOperator",
-        "airflow.providers.google.cloud.operators.dataproc.DataprocSubmitHadoopJobOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLTablesListColumnSpecsOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLTablesListTableSpecsOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLTablesUpdateDatasetOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLDeployModelOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLBatchPredictOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLTrainModelOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLPredictOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLCreateDatasetOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLImportDataOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLGetModelOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLDeleteModelOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLListDatasetOperator",
+        "airflow.providers.google.cloud.operators.automl.AutoMLDeleteDatasetOperator",
+        "airflow.providers.google.cloud.operators.datapipeline.CreateDataPipelineOperator",
+        "airflow.providers.google.cloud.operators.datapipeline.RunDataPipelineOperator",
         "airflow.providers.google.cloud.operators.dataproc.DataprocScaleClusterOperator",
-        "airflow.providers.google.cloud.operators.dataproc.DataprocSubmitSparkJobOperator",
-        "airflow.providers.google.cloud.operators.dataproc.DataprocSubmitSparkSqlJobOperator",
-        "airflow.providers.google.cloud.operators.dataproc.DataprocSubmitHiveJobOperator",
-        "airflow.providers.google.cloud.operators.dataproc.DataprocSubmitPigJobOperator",
-        "airflow.providers.google.cloud.operators.dataproc.DataprocSubmitPySparkJobOperator",
         "airflow.providers.google.cloud.operators.mlengine.MLEngineManageModelOperator",
         "airflow.providers.google.cloud.operators.mlengine.MLEngineManageVersionOperator",
-        "airflow.providers.google.cloud.operators.dataflow.DataflowCreateJavaJobOperator",
-        "airflow.providers.google.cloud.operators.bigquery.BigQueryPatchDatasetOperator",
-        "airflow.providers.google.cloud.operators.dataflow.DataflowCreatePythonJobOperator",
-        "airflow.providers.google.cloud.operators.bigquery.BigQueryExecuteQueryOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineCreateModelOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineCreateVersionOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineDeleteModelOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineDeleteVersionOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineGetModelOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineListVersionsOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineSetDefaultVersionOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineStartBatchPredictionJobOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineStartTrainingJobOperator",
+        "airflow.providers.google.cloud.operators.mlengine.MLEngineTrainingCancelJobOperator",
+        "airflow.providers.google.cloud.operators.vertex_ai.generative_model.PromptLanguageModelOperator",
+        "airflow.providers.google.cloud.operators.vertex_ai.generative_model.GenerateTextEmbeddingsOperator",
+        "airflow.providers.google.cloud.operators.vertex_ai.generative_model.PromptMultimodalModelOperator",
+        "airflow.providers.google.cloud.operators.vertex_ai.generative_model.PromptMultimodalModelWithMediaOperator",
+        "airflow.providers.google.cloud.operators.vertex_ai.generative_model.TextGenerationModelPredictOperator",
         "airflow.providers.google.marketing_platform.operators.GoogleDisplayVideo360CreateQueryOperator",
         "airflow.providers.google.marketing_platform.operators.GoogleDisplayVideo360RunQueryOperator",
         "airflow.providers.google.marketing_platform.operators.GoogleDisplayVideo360DownloadReportV2Operator",
@@ -273,16 +388,20 @@ class TestGoogleProviderProjectStructure(ExampleCoverageTest, AssetsCoverageTest
     }
 
     BASE_CLASSES = {
+        "airflow.providers.google.cloud.operators.alloy_db.AlloyDBBaseOperator",
+        "airflow.providers.google.cloud.operators.alloy_db.AlloyDBWriteBaseOperator",
         "airflow.providers.google.cloud.operators.compute.ComputeEngineBaseOperator",
         "airflow.providers.google.cloud.transfers.bigquery_to_sql.BigQueryToSqlBaseOperator",
         "airflow.providers.google.cloud.operators.cloud_sql.CloudSQLBaseOperator",
         "airflow.providers.google.cloud.operators.dataproc.DataprocJobBaseOperator",
+        "airflow.providers.google.cloud.operators.dataproc._DataprocStartStopClusterBaseOperator",
+        "airflow.providers.google.cloud.operators.dataplex.DataplexCatalogBaseOperator",
         "airflow.providers.google.cloud.operators.vertex_ai.custom_job.CustomTrainingJobBaseOperator",
         "airflow.providers.google.cloud.operators.cloud_base.GoogleCloudBaseOperator",
+        "airflow.providers.google.marketing_platform.operators.search_ads._GoogleSearchAdsBaseOperator",
     }
 
     MISSING_EXAMPLES_FOR_CLASSES = {
-        "airflow.providers.google.cloud.operators.mlengine.MLEngineTrainingCancelJobOperator",
         "airflow.providers.google.cloud.operators.dlp.CloudDLPRedactImageOperator",
         "airflow.providers.google.cloud.transfers.cassandra_to_gcs.CassandraToGCSOperator",
         "airflow.providers.google.cloud.transfers.adls_to_gcs.ADLSToGCSOperator",
@@ -290,8 +409,7 @@ class TestGoogleProviderProjectStructure(ExampleCoverageTest, AssetsCoverageTest
         "airflow.providers.google.cloud.operators.vertex_ai.endpoint_service.GetEndpointOperator",
         "airflow.providers.google.cloud.operators.vertex_ai.auto_ml.AutoMLTrainingJobBaseOperator",
         "airflow.providers.google.cloud.operators.vertex_ai.endpoint_service.UpdateEndpointOperator",
-        "airflow.providers.google.cloud.operators.vertex_ai.batch_prediction_job."
-        "GetBatchPredictionJobOperator",
+        "airflow.providers.google.cloud.operators.vertex_ai.batch_prediction_job.GetBatchPredictionJobOperator",
     }
 
     ASSETS_NOT_REQUIRED = {
@@ -374,7 +492,6 @@ class TestGoogleProviderProjectStructure(ExampleCoverageTest, AssetsCoverageTest
         "GoogleDisplayVideo360GetSDFDownloadOperationSensor",
         "airflow.providers.google.marketing_platform.sensors.display_video."
         "GoogleDisplayVideo360ReportSensor",
-        "airflow.providers.google.marketing_platform.sensors.search_ads.GoogleSearchAdsReportSensor",
     }
 
     @pytest.mark.xfail(reason="We did not reach full coverage yet")
@@ -387,8 +504,11 @@ class TestAmazonProviderProjectStructure(ExampleCoverageTest):
     CLASS_DIRS = ProjectStructureTest.CLASS_DIRS
 
     BASE_CLASSES = {
+        "airflow.providers.amazon.aws.operators.base_aws.AwsBaseOperator",
         "airflow.providers.amazon.aws.operators.rds.RdsBaseOperator",
         "airflow.providers.amazon.aws.operators.sagemaker.SageMakerBaseOperator",
+        "airflow.providers.amazon.aws.sensors.base_aws.AwsBaseSensor",
+        "airflow.providers.amazon.aws.sensors.bedrock.BedrockBaseSensor",
         "airflow.providers.amazon.aws.sensors.dms.DmsTaskBaseSensor",
         "airflow.providers.amazon.aws.sensors.emr.EmrBaseSensor",
         "airflow.providers.amazon.aws.sensors.rds.RdsBaseSensor",
@@ -398,13 +518,14 @@ class TestAmazonProviderProjectStructure(ExampleCoverageTest):
         "airflow.providers.amazon.aws.sensors.ecs.EcsBaseSensor",
         "airflow.providers.amazon.aws.sensors.eks.EksBaseSensor",
         "airflow.providers.amazon.aws.transfers.base.AwsToAwsBaseOperator",
+        "airflow.providers.amazon.aws.operators.comprehend.ComprehendBaseOperator",
+        "airflow.providers.amazon.aws.sensors.comprehend.ComprehendBaseSensor",
+        "airflow.providers.amazon.aws.sensors.kinesis_analytics.KinesisAnalyticsV2BaseSensor",
     }
 
     MISSING_EXAMPLES_FOR_CLASSES = {
         # S3 Exasol transfer difficult to test, see: https://github.com/apache/airflow/issues/22632
         "airflow.providers.amazon.aws.transfers.exasol_to_s3.ExasolToS3Operator",
-        # Glue Catalog sensor difficult to test
-        "airflow.providers.amazon.aws.sensors.glue_catalog_partition.GlueCatalogPartitionSensor",
     }
 
     DEPRECATED_CLASSES = {
@@ -416,18 +537,11 @@ class TestElasticsearchProviderProjectStructure(ExampleCoverageTest):
     PROVIDER = "elasticsearch"
     CLASS_DIRS = {"hooks"}
     CLASS_SUFFIXES = ["Hook"]
-    DEPRECATED_CLASSES = {
-        "airflow.providers.elasticsearch.hooks.elasticsearch.ElasticsearchHook",
-    }
 
 
 class TestCncfProviderProjectStructure(ExampleCoverageTest):
     PROVIDER = "cncf"
     CLASS_DIRS = ProjectStructureTest.CLASS_DIRS
-    DEPRECATED_CLASSES = {
-        "airflow.providers.cncf.kubernetes.operators.kubernetes_pod",
-        "airflow.providers.cncf.kubernetes.triggers.kubernetes_pod",
-    }
     BASE_CLASSES = {"airflow.providers.cncf.kubernetes.operators.resource.KubernetesResourceBaseOperator"}
 
 
@@ -435,16 +549,13 @@ class TestSlackProviderProjectStructure(ExampleCoverageTest):
     PROVIDER = "slack"
     CLASS_DIRS = ProjectStructureTest.CLASS_DIRS
     BASE_CLASSES = {
-        "airflow.providers.slack.transfers.sql_to_slack.BaseSqlToSlackOperator",
-    }
-    MISSING_EXAMPLES_FOR_CLASSES = {
+        "airflow.providers.slack.transfers.base_sql_to_slack.BaseSqlToSlackOperator",
         "airflow.providers.slack.operators.slack.SlackAPIOperator",
-        "airflow.providers.slack.operators.slack.SlackAPIPostOperator",
-        "airflow.providers.slack.operators.slack_webhook.SlackWebhookOperator",
-        "airflow.providers.slack.transfers.sql_to_slack.SqlToSlackApiFileOperator",
     }
+    MISSING_EXAMPLES_FOR_CLASSES = set()
     DEPRECATED_CLASSES = {
         "airflow.providers.slack.notifications.slack_notifier.py.",
+        "airflow.providers.slack.transfers.sql_to_slack.SqlToSlackOperator",
     }
 
 
@@ -455,14 +566,12 @@ class TestDockerProviderProjectStructure(ExampleCoverageTest):
 class TestOperatorsHooks:
     def test_no_illegal_suffixes(self):
         illegal_suffixes = ["_operator.py", "_hook.py", "_sensor.py"]
-        files = itertools.chain(
-            *(
-                glob.glob(f"{ROOT_FOLDER}/{part}/providers/**/{resource_type}/*.py", recursive=True)
-                for resource_type in ["operators", "hooks", "sensors", "example_dags"]
-                for part in ["airflow", "tests"]
-            )
+        files = itertools.chain.from_iterable(
+            glob.glob(f"{ROOT_FOLDER}/{part}/providers/**/{resource_type}/*.py", recursive=True)
+            for resource_type in ["operators", "hooks", "sensors", "example_dags"]
+            for part in ["airflow", "tests"]
         )
 
-        invalid_files = [f for f in files if any(f.endswith(suffix) for suffix in illegal_suffixes)]
+        invalid_files = [f for f in files if f.endswith(tuple(illegal_suffixes))]
 
-        assert [] == invalid_files
+        assert invalid_files == []

@@ -36,6 +36,11 @@ Prerequisite Tasks
 
 .. include:: ../_partials/prerequisite_tasks.rst
 
+Generic Parameters
+------------------
+
+.. include:: ../_partials/generic_parameters.rst
+
 Operators
 ---------
 
@@ -47,7 +52,7 @@ Create a replication task
 To create a replication task you can use
 :class:`~airflow.providers.amazon.aws.operators.dms.DmsCreateTaskOperator`.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_dms.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_dms_create_task]
@@ -61,7 +66,7 @@ Start a replication task
 To start a replication task you can use
 :class:`~airflow.providers.amazon.aws.operators.dms.DmsStartTaskOperator`.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_dms.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_dms_start_task]
@@ -75,7 +80,7 @@ Get details of replication tasks
 To retrieve the details for a list of replication tasks you can use
 :class:`~airflow.providers.amazon.aws.operators.dms.DmsDescribeTasksOperator`.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_dms.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_dms_describe_tasks]
@@ -89,7 +94,7 @@ Stop a replication task
 To stop a replication task you can use
 :class:`~airflow.providers.amazon.aws.operators.dms.DmsStopTaskOperator`.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_dms.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_dms_stop_task]
@@ -103,11 +108,97 @@ Delete a replication task
 To delete a replication task you can use
 :class:`~airflow.providers.amazon.aws.operators.dms.DmsDeleteTaskOperator`.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_dms.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_dms_delete_task]
     :end-before: [END howto_operator_dms_delete_task]
+
+.. _howto/operator:DmsCreateReplicationConfigOperator:
+
+Create a serverless replication config
+======================================
+
+To create a serverless replication config use
+:class:`~airflow.providers.amazon.aws.operators.dms.DmsCreateReplicationConfigOperator`.
+
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms_serverless.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dms_create_replication_config]
+    :end-before: [END howto_operator_dms_create_replication_config]
+
+.. _howto/operator:DmsDescribeReplicationConfigsOperator:
+
+Describe a serverless replication config
+========================================
+
+To describe a serverless replication config use
+:class:`~airflow.providers.amazon.aws.operators.dms.DmsDescribeReplicationConfigsOperator`.
+
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms_serverless.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dms_describe_replication_config]
+    :end-before: [END howto_operator_dms_describe_replication_config]
+
+.. _howto/operator:DmsStartReplicationOperator:
+
+Start a serverless replication
+==============================
+
+To start a serverless replication use
+:class:`~airflow.providers.amazon.aws.operators.dms.DmsStartReplicationOperator`.
+
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms_serverless.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dms_serverless_start_replication]
+    :end-before: [END howto_operator_dms_serverless_start_replication]
+
+.. _howto/operator:DmsStopReplicationOperator:
+
+Stop a serverless replication
+==============================
+
+To stop a serverless replication use
+:class:`~airflow.providers.amazon.aws.operators.dms.DmsStopReplicationOperator`.
+
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms_serverless.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dms_serverless_stop_replication]
+    :end-before: [END howto_operator_dms_serverless_stop_replication]
+
+.. _howto/operator:DmsDescribeReplicationsOperator:
+
+Get the status of a serverless replication
+==========================================
+
+To get the status of a serverless replication use
+:class:`~airflow.providers.amazon.aws.operators.dms.DmsDescribeReplicationsOperator`.
+
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms_serverless.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dms_serverless_describe_replication]
+    :end-before: [END howto_operator_dms_serverless_describe_replication]
+
+.. _howto/operator:DmsDeleteReplicationConfigOperator:
+
+Delete a serverless replication configuration
+=============================================
+
+To delete a serverless replication config use
+:class:`~airflow.providers.amazon.aws.operators.dms.DmsDeleteReplicationConfigOperator`.
+
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms_serverless.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_dms_serverless_delete_replication_config]
+    :end-before: [END howto_operator_dms_serverless_delete_replication_config]
+
+
 
 Sensors
 -------
@@ -120,7 +211,7 @@ Wait for a replication task to complete
 To check the state of a replication task until it is completed, you can use
 :class:`~airflow.providers.amazon.aws.sensors.dms.DmsTaskCompletedSensor`.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_dms.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_dms.py
     :language: python
     :dedent: 4
     :start-after: [START howto_sensor_dms_task_completed]

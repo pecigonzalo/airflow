@@ -18,6 +18,7 @@
 """
 This is an example dag for using a Kubernetes Executor Configuration.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,15 +26,12 @@ import os
 
 import pendulum
 
-from airflow import DAG
 from airflow.configuration import conf
 from airflow.decorators import task
 from airflow.example_dags.libs.helper import print_stuff
+from airflow.models.dag import DAG
 
 log = logging.getLogger(__name__)
-
-worker_container_repository = conf.get("kubernetes_executor", "worker_container_repository")
-worker_container_tag = conf.get("kubernetes_executor", "worker_container_tag")
 
 try:
     from kubernetes.client import models as k8s
@@ -163,6 +161,8 @@ if k8s:
             print_stuff()
 
         other_ns_task = other_namespace_task()
+        worker_container_repository = conf.get("kubernetes_executor", "worker_container_repository")
+        worker_container_tag = conf.get("kubernetes_executor", "worker_container_tag")
 
         # You can also change the base image, here we used the worker image for demonstration.
         # Note that the image must have the same configuration as the

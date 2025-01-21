@@ -19,15 +19,25 @@
 ``apache-airflow-providers-jenkins``
 ====================================
 
-Content
--------
+
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Guides
 
     Connection types <connections>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
@@ -35,15 +45,17 @@ Content
 
 .. toctree::
     :hidden:
+    :maxdepth: 1
     :caption: System tests
 
-    System Tests <_api/tests/system/providers/jenkins/index>
+    System Tests <_api/tests/system/jenkins/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
-    Example DAGs <https://github.com/apache/airflow/tree/providers-jenkins/|version|/tests/system/providers/jenkins>
+    Example DAGs <https://github.com/apache/airflow/tree/providers-jenkins/|version|/providers/tests/system/jenkins>
     PyPI Repository <https://pypi.org/project/apache-airflow-providers-jenkins/>
     Installing from sources <installing-providers-from-sources>
 
@@ -51,43 +63,42 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-jenkins
+apache-airflow-providers-jenkins package
 ------------------------------------------------------
 
 `Jenkins <https://jenkins.io/>`__
 
 
-Release: 3.3.0
+Release: 4.0.0
 
 Provider package
 ----------------
 
-This is a provider package for ``jenkins`` provider. All classes for this provider package
-are in ``airflow.providers.jenkins`` python package.
+This package is for the ``jenkins`` provider.
+All classes for this package are included in the ``airflow.providers.jenkins`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-jenkins``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-jenkins``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
 ==================  ==================
 PIP package         Version required
 ==================  ==================
-``apache-airflow``  ``>=2.4.0``
+``apache-airflow``  ``>=2.9.0``
 ``python-jenkins``  ``>=1.0.0``
 ==================  ==================
-
-.. include:: ../../airflow/providers/jenkins/CHANGELOG.rst

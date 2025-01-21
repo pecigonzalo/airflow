@@ -28,7 +28,7 @@ common spreadsheet tasks.
 Prerequisite Tasks
 ^^^^^^^^^^^^^^^^^^
 
-.. include::/operators/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 .. _howto/operator:GCSToGoogleSheets:
 
@@ -38,7 +38,7 @@ Upload data from GCS to Google Sheets
 To upload data from Google Cloud Storage to Google Spreadsheet you can use the
 :class:`~airflow.providers.google.suite.transfers.gcs_to_sheets.GCSToGoogleSheetsOperator`.
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/gcs/example_gcs_to_sheets.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/gcs/example_gcs_to_sheets.py
     :language: python
     :dedent: 4
     :start-after: [START upload_gcs_to_sheets]

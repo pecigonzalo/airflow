@@ -27,12 +27,6 @@ querying data where it lives, including Hive, Cassandra, relational databases or
 A single Trino query can combine data from multiple sources, allowing for analytics across your entire
 organization.
 
-
-Prerequisite Tasks
-^^^^^^^^^^^^^^^^^^
-
-.. include::/operators/_partials/prerequisite_tasks.rst
-
 .. _howto/operator:GCSToPresto:
 
 Load CSV from GCS to Trino Table
@@ -45,7 +39,7 @@ This operator assumes that CSV does not have headers and the data is correspondi
 pre-existing presto table. Optionally, you can provide schema as tuple/list of strings or as a path to a
 JSON file in the same bucket as the CSV file.
 
-.. exampleinclude:: /../../tests/system/providers/trino/example_gcs_to_trino.py
+.. exampleinclude:: /../../providers/tests/system/trino/example_gcs_to_trino.py
     :language: python
     :dedent: 4
     :start-after: [START gcs_csv_to_trino_table]

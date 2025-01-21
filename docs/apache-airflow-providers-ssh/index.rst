@@ -19,22 +19,32 @@
 ``apache-airflow-providers-ssh``
 ================================
 
-Content
--------
 
 .. toctree::
+    :hidden:
+    :maxdepth: 1
+    :caption: Basics
+
+    Home <self>
+    Changelog <changelog>
+    Security <security>
+
+.. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Guides
 
     Connection types <connections/ssh>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: References
 
     Python API <_api/airflow/providers/ssh/index>
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Resources
 
@@ -45,44 +55,43 @@ Content
 
 
 .. toctree::
+    :hidden:
     :maxdepth: 1
     :caption: Commits
 
     Detailed list of commits <commits>
 
 
-Package apache-airflow-providers-ssh
+apache-airflow-providers-ssh package
 ------------------------------------------------------
 
 `Secure Shell (SSH) <https://tools.ietf.org/html/rfc4251>`__
 
 
-Release: 3.7.0
+Release: 4.0.0
 
 Provider package
 ----------------
 
-This is a provider package for ``ssh`` provider. All classes for this provider package
-are in ``airflow.providers.ssh`` python package.
+This package is for the ``ssh`` provider.
+All classes for this package are included in the ``airflow.providers.ssh`` python package.
 
 Installation
 ------------
 
-You can install this package on top of an existing Airflow 2 installation (see ``Requirements`` below)
-for the minimum Airflow version supported) via
-``pip install apache-airflow-providers-ssh``
+You can install this package on top of an existing Airflow 2 installation via
+``pip install apache-airflow-providers-ssh``.
+For the minimum Airflow version supported, see ``Requirements`` below.
 
 Requirements
 ------------
 
-The minimum Apache Airflow version supported by this provider package is ``2.4.0``.
+The minimum Apache Airflow version supported by this provider package is ``2.9.0``.
 
 ==================  ==================
 PIP package         Version required
 ==================  ==================
-``apache-airflow``  ``>=2.4.0``
-``paramiko``        ``>=2.6.0``
+``apache-airflow``  ``>=2.9.0``
+``paramiko``        ``>=2.9.0``
 ``sshtunnel``       ``>=0.3.2``
 ==================  ==================
-
-.. include:: ../../airflow/providers/ssh/CHANGELOG.rst

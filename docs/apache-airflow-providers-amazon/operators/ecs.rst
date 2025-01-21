@@ -30,6 +30,10 @@ Prerequisite Tasks
 
 .. include:: ../_partials/prerequisite_tasks.rst
 
+Generic Parameters
+------------------
+.. include:: ../_partials/generic_parameters.rst
+
 Operators
 ---------
 
@@ -44,7 +48,7 @@ To create an Amazon ECS cluster you can use
 All optional parameters to be passed to the Create Cluster API should be
 passed in the 'create_cluster_kwargs' dict.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_ecs_create_cluster]
@@ -59,7 +63,7 @@ To delete an Amazon ECS cluster you can use
 :class:`~airflow.providers.amazon.aws.operators.ecs.EcsDeleteClusterOperator`.
 
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_ecs_delete_cluster]
@@ -77,7 +81,7 @@ All optional parameters to be passed to the Register Task Definition API should 
 passed in the 'register_task_kwargs' dict.
 
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_ecs_register_task_definition]
@@ -92,7 +96,7 @@ To deregister a task definition you can use
 :class:`~airflow.providers.amazon.aws.operators.ecs.EcsDeregisterTaskDefinitionOperator`.
 
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_ecs_deregister_task_definition]
@@ -121,14 +125,14 @@ The parameters you need to configure for this Operator will depend upon which ``
 * If you are using EC2 as the compute resources in your ECS Cluster, set the parameter to EC2.
 * If you have integrated external resources in your ECS Cluster, for example using ECS Anywhere, and want to run your containers on those external resources, set the parameter to EXTERNAL.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_ecs_run_task]
     :end-before: [END howto_operator_ecs_run_task]
 
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs_fargate.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs_fargate.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_ecs]
@@ -141,7 +145,7 @@ To stream logs to AWS CloudWatch, you need to define the parameters below.
 Using the example above, we would add these additional parameters to enable logging to CloudWatch.
 You need to ensure that you have the appropriate level of permissions (see next section).
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs.py
     :language: python
     :dedent: 8
     :start-after: [START howto_awslogs_ecs]
@@ -150,19 +154,32 @@ You need to ensure that you have the appropriate level of permissions (see next 
 IAM Permissions
 """""""""""""""
 
-You need to ensure you have the following IAM permissions to run tasks via this operator.
-In this example, the operator will have permissions to run tasks on an ECS Cluster called "cluster a" in a specific AWS region and account.
+You need to ensure you have the following IAM permissions to run tasks via the EcsRunTaskOperator:
 
 .. code-block::
 
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ecs:RunTask",
-                "ecs:DescribeTasks"
-            ],
-            "Resource": : [ "arn:aws:ecs:{aws region}:{aws account number}:cluster/{custer a}"
-        }
+  {
+      "Effect": "Allow",
+      "Action": [
+          "ecs:RunTask",
+          "ecs:DescribeTasks",
+      ]
+      "Resource": [ "arn:aws:ecs:{aws region}:{aws account number}:task_definition/{task definition family}" ]
+  },
+  {
+      "Effect": "Allow",
+      "Action": [
+          "iam:PassRole"
+      ]
+      "Resource": [ "arn:aws:iam::{aws account number}:role/{task execution role name}" ]
+  },
+  {
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeTasks",
+      ],
+      "Resource": [ "arn:aws:ecs:{aws region}:{aws account number}:task/{ecs cluster name}/*" ]
+  }
 
 If you use the "reattach=True" (the default is False), you need to add further permissions.
 You need to add the following additional Actions to the IAM policy.
@@ -211,7 +228,7 @@ the failure reason if a failed state is provided and that state is reached
 before the target state.
 
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_sensor_ecs_cluster_state]
@@ -231,7 +248,7 @@ to change that.  Raises an AirflowException with the failure reason if the faile
 is reached before the target state.
 
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_sensor_ecs_task_definition_state]
@@ -250,7 +267,7 @@ both can be overridden with provided values.  Raises an AirflowException with
 the failure reason if a failed state is provided and that state is reached
 before the target state.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_ecs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_ecs_fargate.py
     :language: python
     :dedent: 4
     :start-after: [START howto_sensor_ecs_task_state]

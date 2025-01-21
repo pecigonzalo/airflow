@@ -23,9 +23,6 @@ from airflow.executors.sequential_executor import SequentialExecutor
 
 
 class TestSequentialExecutor:
-    def test_supports_pickling(self):
-        assert not SequentialExecutor.supports_pickling
-
     def test_supports_sentry(self):
         assert not SequentialExecutor.supports_sentry
 
@@ -37,9 +34,6 @@ class TestSequentialExecutor:
 
     def test_serve_logs_default_value(self):
         assert SequentialExecutor.serve_logs
-
-    def test_is_single_threaded_default_value(self):
-        assert SequentialExecutor.is_single_threaded
 
     @mock.patch("airflow.executors.sequential_executor.SequentialExecutor.sync")
     @mock.patch("airflow.executors.base_executor.BaseExecutor.trigger_tasks")
@@ -63,3 +57,35 @@ class TestSequentialExecutor:
             ),
         ]
         mock_stats_gauge.assert_has_calls(calls)
+
+    def test_execute_async(self):
+        executor = SequentialExecutor()
+        mock_key = mock.Mock()
+        mock_command = mock.Mock()
+        mock_queue = "mock_queue"
+        mock_executor_config = mock.Mock()
+
+        executor.validate_airflow_tasks_run_command = mock.Mock()
+        executor.execute_async(mock_key, mock_command, mock_queue, mock_executor_config)
+
+        executor.validate_airflow_tasks_run_command.assert_called_once_with(mock_command)
+        assert executor.commands_to_run == [(mock_key, mock_command)]
+
+    @mock.patch("airflow.executors.sequential_executor.subprocess")
+    def test_sync(self, mock_subprocess):
+        executor = SequentialExecutor()
+        executor.commands_to_run = [("key", ["echo", "test_command"])]
+        mock_subprocess.check_call.return_value = 0
+
+        executor.success = mock.Mock()
+        executor.sync()
+        executor.success.assert_called_once_with("key")
+
+        assert executor.commands_to_run == []
+
+    def test_end(self):
+        executor = SequentialExecutor()
+        executor.heartbeat = mock.Mock()
+        executor.end()
+
+        executor.heartbeat.assert_called_once()

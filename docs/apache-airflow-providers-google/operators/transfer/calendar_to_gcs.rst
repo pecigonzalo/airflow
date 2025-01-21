@@ -27,7 +27,7 @@ meetings and events and get reminders about upcoming activities, so you always k
 Prerequisite Tasks
 ^^^^^^^^^^^^^^^^^^
 
-.. include::/operators/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 .. _howto/operator:GoogleCalendarToGCSOperator:
 
@@ -37,7 +37,7 @@ Upload data from Google Calendar to GCS
 To upload data from Google Calendar to Google Cloud Storage you can use the
 :class:`~airflow.providers.google.cloud.transfers.calendar_to_gcs.GoogleCalendarToGCSOperator`.
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/gcs/example_calendar_to_gcs.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/gcs/example_calendar_to_gcs.py
     :language: python
     :dedent: 4
     :start-after: [START upload_calendar_to_gcs]

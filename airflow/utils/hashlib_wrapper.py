@@ -23,18 +23,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from _typeshed import ReadableBuffer
 
-from airflow import PY39
-
 
 def md5(__string: ReadableBuffer = b"") -> hashlib._Hash:
     """
-    Safely allows calling the hashlib.md5 function with the "usedforsecurity" disabled
-    when specified in the configuration.
+    Safely allows calling the ``hashlib.md5`` function when ``usedforsecurity`` is disabled in configuration.
 
-    :param string: The data to hash.
-        Default to empty str byte.
+    :param __string: The data to hash. Default to empty str byte.
     :return: The hashed value.
     """
-    if PY39:
-        return hashlib.md5(__string, usedforsecurity=False)  # type: ignore
-    return hashlib.md5(__string)
+    return hashlib.md5(__string, usedforsecurity=False)  # type: ignore

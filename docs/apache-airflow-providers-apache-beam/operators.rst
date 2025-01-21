@@ -24,6 +24,11 @@ streaming data-parallel processing pipelines. Using one of the open source Beam 
 that defines the pipeline. The pipeline is then executed by one of Beam's supported distributed processing
 back-ends, which include Apache Flink, Apache Spark, and Google Cloud Dataflow.
 
+.. note::
+    This operator requires ``gcloud`` command (Google Cloud SDK) to be installed on the Airflow worker
+    <https://cloud.google.com/sdk/docs/install> when the Apache Beam pipeline runs on the
+    `Dataflow service <https://cloud.google.com/dataflow/docs>`_.
+
 
 .. _howto/operator:BeamRunPythonPipelineOperator:
 
@@ -49,32 +54,61 @@ recommend avoiding unless the Dataflow job requires it.
 Python Pipelines with DirectRunner
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_python.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_python.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_python_direct_runner_pipeline_local_file]
     :end-before: [END howto_operator_start_python_direct_runner_pipeline_local_file]
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_python.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_python.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_python_direct_runner_pipeline_gcs_file]
     :end-before: [END howto_operator_start_python_direct_runner_pipeline_gcs_file]
 
+You can use deferrable mode for this action in order to run the operator asynchronously. It will give you a
+possibility to free up the worker when it knows it has to wait, and hand off the job of resuming Operator to a Trigger.
+As a result, while it is suspended (deferred), it is not taking up a worker slot and your cluster will have a
+lot less resources wasted on idle Operators or Sensors:
+
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_python_async.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_start_python_direct_runner_pipeline_local_file_async]
+    :end-before: [END howto_operator_start_python_direct_runner_pipeline_local_file_async]
+
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_python_async.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_start_python_direct_runner_pipeline_gcs_file_async]
+    :end-before: [END howto_operator_start_python_direct_runner_pipeline_gcs_file_async]
+
 Python Pipelines with DataflowRunner
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_python.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_python.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_python_dataflow_runner_pipeline_gcs_file]
     :end-before: [END howto_operator_start_python_dataflow_runner_pipeline_gcs_file]
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_python_dataflow.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_python_dataflow.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_python_dataflow_runner_pipeline_async_gcs_file]
     :end-before: [END howto_operator_start_python_dataflow_runner_pipeline_async_gcs_file]
+
+
+You can use deferrable mode for this action in order to run the operator asynchronously. It will give you a
+possibility to free up the worker when it knows it has to wait, and hand off the job of resuming Operator to a Trigger.
+As a result, while it is suspended (deferred), it is not taking up a worker slot and your cluster will have a
+lot less resources wasted on idle Operators or Sensors:
+
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_python_async.py
+    :language: python
+    :dedent: 4
+    :start-after: [START howto_operator_start_python_dataflow_runner_pipeline_gcs_file_async]
+    :end-before: [END howto_operator_start_python_dataflow_runner_pipeline_gcs_file_async]
 
 |
 |
@@ -92,7 +126,7 @@ has the ability to download or available on the local filesystem (provide the ab
 Java Pipelines with DirectRunner
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_beam.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_beam.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_java_direct_runner_pipeline]
@@ -101,7 +135,7 @@ Java Pipelines with DirectRunner
 Java Pipelines with DataflowRunner
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_java_dataflow.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_java_dataflow.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_java_dataflow_runner_pipeline]
@@ -125,13 +159,13 @@ init the module and install dependencies with ``go run init example.com/main`` a
 Go Pipelines with DirectRunner
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_go.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_go.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_go_direct_runner_pipeline_local_file]
     :end-before: [END howto_operator_start_go_direct_runner_pipeline_local_file]
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_go.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_go.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_go_direct_runner_pipeline_gcs_file]
@@ -140,13 +174,13 @@ Go Pipelines with DirectRunner
 Go Pipelines with DataflowRunner
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_go.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_go.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_go_dataflow_runner_pipeline_gcs_file]
     :end-before: [END howto_operator_start_go_dataflow_runner_pipeline_gcs_file]
 
-.. exampleinclude:: /../../tests/system/providers/apache/beam/example_go_dataflow.py
+.. exampleinclude:: /../../providers/tests/system/apache/beam/example_go_dataflow.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_start_go_dataflow_runner_pipeline_async_gcs_file]

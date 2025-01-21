@@ -17,9 +17,35 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, AsyncIterator
+import logging
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any
 
+from airflow.callbacks.callback_requests import TaskCallbackRequest
+from airflow.callbacks.database_callback_sink import DatabaseCallbackSink
 from airflow.utils.log.logging_mixin import LoggingMixin
+from airflow.utils.session import NEW_SESSION, provide_session
+from airflow.utils.state import TaskInstanceState
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from airflow.models import TaskInstance
+
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class StartTriggerArgs:
+    """Arguments required for start task execution from triggerer."""
+
+    trigger_cls: str
+    next_method: str
+    trigger_kwargs: dict[str, Any] | None = None
+    next_kwargs: dict[str, Any] | None = None
+    timeout: timedelta | None = None
 
 
 class BaseTrigger(abc.ABC, LoggingMixin):
@@ -37,23 +63,19 @@ class BaseTrigger(abc.ABC, LoggingMixin):
     """
 
     def __init__(self, **kwargs):
-
         # these values are set by triggerer when preparing to run the instance
         # when run, they are injected into logger record.
         self.task_instance = None
         self.trigger_id = None
 
     def _set_context(self, context):
-        """
-        This method, part of LoggingMixin, is used mainly for configuration of logging
-        for tasks, but is not used for triggers.
-        """
+        """Part of LoggingMixin and used mainly for configuration of task logging; not used for triggers."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def serialize(self) -> tuple[str, dict[str, Any]]:
         """
-        Returns the information needed to reconstruct this Trigger.
+        Return the information needed to reconstruct this Trigger.
 
         :return: Tuple of (class path, keyword arguments needed to re-instantiate).
         """
@@ -62,7 +84,7 @@ class BaseTrigger(abc.ABC, LoggingMixin):
     @abc.abstractmethod
     async def run(self) -> AsyncIterator[TriggerEvent]:
         """
-        Runs the trigger in an asynchronous context.
+        Run the trigger in an asynchronous context.
 
         The trigger should yield an Event whenever it wants to fire off
         an event, and return None if it is finished. Single-event triggers
@@ -93,10 +115,14 @@ class BaseTrigger(abc.ABC, LoggingMixin):
         and handle it appropriately (in async-compatible way).
         """
 
-    def __repr__(self) -> str:
-        classpath, kwargs = self.serialize()
+    @staticmethod
+    def repr(classpath: str, kwargs: dict[str, Any]):
         kwargs_str = ", ".join(f"{k}={v}" for k, v in kwargs.items())
         return f"<{classpath} {kwargs_str}>"
+
+    def __repr__(self) -> str:
+        classpath, kwargs = self.serialize()
+        return self.repr(classpath, kwargs)
 
 
 class TriggerEvent:
@@ -119,3 +145,106 @@ class TriggerEvent:
         if isinstance(other, TriggerEvent):
             return other.payload == self.payload
         return False
+
+    @provide_session
+    def handle_submit(self, *, task_instance: TaskInstance, session: Session = NEW_SESSION) -> None:
+        """
+        Handle the submit event for a given task instance.
+
+        This function sets the next method and next kwargs of the task instance,
+        as well as its state to scheduled. It also adds the event's payload
+        into the kwargs for the task.
+
+        :param task_instance: The task instance to handle the submit event for.
+        :param session: The session to be used for the database callback sink.
+        """
+        # Get the next kwargs of the task instance, or an empty dictionary if it doesn't exist
+        next_kwargs = task_instance.next_kwargs or {}
+
+        # Add the event's payload into the kwargs for the task
+        next_kwargs["event"] = self.payload
+
+        # Update the next kwargs of the task instance
+        task_instance.next_kwargs = next_kwargs
+
+        # Remove ourselves as its trigger
+        task_instance.trigger_id = None
+
+        # Set the state of the task instance to scheduled
+        task_instance.state = TaskInstanceState.SCHEDULED
+
+
+class BaseTaskEndEvent(TriggerEvent):
+    """
+    Base event class to end the task without resuming on worker.
+
+    :meta private:
+    """
+
+    task_instance_state: TaskInstanceState
+
+    def __init__(self, *, xcoms: dict[str, Any] | None = None, **kwargs) -> None:
+        """
+        Initialize the class with the specified parameters.
+
+        :param xcoms: A dictionary of XComs or None.
+        :param kwargs: Additional keyword arguments.
+        """
+        if "payload" in kwargs:
+            raise ValueError("Param 'payload' not supported for this class.")
+        super().__init__(payload=self.task_instance_state)
+        self.xcoms = xcoms
+
+    @provide_session
+    def handle_submit(self, *, task_instance: TaskInstance, session: Session = NEW_SESSION) -> None:
+        """
+        Submit event for the given task instance.
+
+        Marks the task with the state `task_instance_state` and optionally pushes xcom if applicable.
+
+        :param task_instance: The task instance to be submitted.
+        :param session: The session to be used for the database callback sink.
+        """
+        # Mark the task with terminal state and prevent it from resuming on worker
+        task_instance.trigger_id = None
+        task_instance.set_state(self.task_instance_state, session=session)
+        self._submit_callback_if_necessary(task_instance=task_instance, session=session)
+        self._push_xcoms_if_necessary(task_instance=task_instance)
+
+    def _submit_callback_if_necessary(self, *, task_instance: TaskInstance, session) -> None:
+        """Submit a callback request if the task state is SUCCESS or FAILED."""
+        if self.task_instance_state in (TaskInstanceState.SUCCESS, TaskInstanceState.FAILED):
+            request = TaskCallbackRequest(
+                full_filepath=task_instance.dag_model.fileloc,
+                ti=task_instance,
+                task_callback_type=self.task_instance_state,
+            )
+            log.info("Sending callback: %s", request)
+            try:
+                DatabaseCallbackSink().send(callback=request, session=session)
+            except Exception:
+                log.exception("Failed to send callback.")
+
+    def _push_xcoms_if_necessary(self, *, task_instance: TaskInstance) -> None:
+        """Pushes XComs to the database if they are provided."""
+        if self.xcoms:
+            for key, value in self.xcoms.items():
+                task_instance.xcom_push(key=key, value=value)
+
+
+class TaskSuccessEvent(BaseTaskEndEvent):
+    """Yield this event in order to end the task successfully."""
+
+    task_instance_state = TaskInstanceState.SUCCESS
+
+
+class TaskFailedEvent(BaseTaskEndEvent):
+    """Yield this event in order to end the task with failure."""
+
+    task_instance_state = TaskInstanceState.FAILED
+
+
+class TaskSkippedEvent(BaseTaskEndEvent):
+    """Yield this event in order to end the task with status 'skipped'."""
+
+    task_instance_state = TaskInstanceState.SKIPPED

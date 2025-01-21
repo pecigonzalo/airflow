@@ -18,7 +18,9 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import re
+import time
 from unittest import mock
 from unittest.mock import Mock
 
@@ -29,8 +31,12 @@ import airflow
 from airflow.exceptions import AirflowConfigException, InvalidStatsNameException
 from airflow.metrics.datadog_logger import SafeDogStatsdLogger
 from airflow.metrics.statsd_logger import SafeStatsdLogger
-from airflow.metrics.validators import AllowListValidator, BlockListValidator
-from tests.test_utils.config import conf_vars
+from airflow.metrics.validators import (
+    PatternAllowListValidator,
+    PatternBlockListValidator,
+)
+
+from tests_common.test_utils.config import conf_vars
 
 
 class CustomStatsd(statsd.StatsClient):
@@ -72,7 +78,7 @@ class TestStats:
         with self.stats.timer("empty_timer") as t:
             pass
         self.statsd_client.timer.assert_called_once_with("empty_timer")
-        assert type(t.duration) == float
+        assert isinstance(t.duration, float)
 
     def test_empty_timer(self):
         with self.stats.timer():
@@ -118,15 +124,14 @@ class TestStats:
                 ("metrics", "statsd_on"): "True",
                 ("metrics", "statsd_custom_client_path"): f"{__name__}.InvalidCustomStatsd",
             }
-        ), pytest.raises(
-            AirflowConfigException,
-            match=re.escape(
-                "Your custom StatsD client must extend the statsd."
-                "StatsClient in order to ensure backwards compatibility."
-            ),
         ):
             importlib.reload(airflow.stats)
-            airflow.stats.Stats.incr("empty_key")
+            error_message = re.escape(
+                "Your custom StatsD client must extend the statsd."
+                "StatsClient in order to ensure backwards compatibility."
+            )
+            with pytest.raises(AirflowConfigException, match=error_message):
+                airflow.stats.Stats.incr("empty_key")
         importlib.reload(airflow.stats)
 
     def test_load_allow_list_validator(self):
@@ -137,7 +142,7 @@ class TestStats:
             }
         ):
             importlib.reload(airflow.stats)
-            assert isinstance(airflow.stats.Stats.metrics_validator, AllowListValidator)
+            assert type(airflow.stats.Stats.metrics_validator) is PatternAllowListValidator
             assert airflow.stats.Stats.metrics_validator.validate_list == ("name1", "name2")
         # Avoid side-effects
         importlib.reload(airflow.stats)
@@ -150,7 +155,7 @@ class TestStats:
             }
         ):
             importlib.reload(airflow.stats)
-            assert isinstance(airflow.stats.Stats.metrics_validator, BlockListValidator)
+            assert type(airflow.stats.Stats.metrics_validator) is PatternBlockListValidator
             assert airflow.stats.Stats.metrics_validator.validate_list == ("name1", "name2")
         # Avoid side-effects
         importlib.reload(airflow.stats)
@@ -164,7 +169,7 @@ class TestStats:
             }
         ):
             importlib.reload(airflow.stats)
-            assert isinstance(airflow.stats.Stats.metrics_validator, AllowListValidator)
+            assert type(airflow.stats.Stats.metrics_validator) is PatternAllowListValidator
             assert airflow.stats.Stats.metrics_validator.validate_list == ("name1", "name2")
         # Avoid side-effects
         importlib.reload(airflow.stats)
@@ -215,10 +220,14 @@ class TestDogStats:
             metric="empty_key", sample_rate=1, tags=[], value=1
         )
 
-    def test_timer(self):
-        with self.dogstatsd.timer("empty_timer"):
+    @mock.patch.object(time, "perf_counter", side_effect=[0.0, 100.0])
+    def test_timer(self, time_mock):
+        with self.dogstatsd.timer("empty_timer") as timer:
             pass
         self.dogstatsd_client.timed.assert_called_once_with("empty_timer", tags=[])
+        expected_duration = 1000.0 * 100.0
+        assert expected_duration == timer.duration
+        assert time_mock.call_count == 2
 
     def test_empty_timer(self):
         with self.dogstatsd.timer():
@@ -232,7 +241,7 @@ class TestDogStats:
         self.dogstatsd_client.timing.assert_called_once_with(metric="empty_timer", value=123, tags=[])
 
         self.dogstatsd.timing("empty_timer", datetime.timedelta(seconds=123))
-        self.dogstatsd_client.timing.assert_called_with(metric="empty_timer", value=123.0, tags=[])
+        self.dogstatsd_client.timing.assert_called_with(metric="empty_timer", value=123000.0, tags=[])
 
     def test_gauge(self):
         self.dogstatsd.gauge("empty", 123)
@@ -258,47 +267,120 @@ class TestDogStats:
     def test_does_not_send_stats_using_statsd_when_statsd_and_dogstatsd_both_on(self):
         from datadog import DogStatsd
 
-        with conf_vars({("metrics", "statsd_on"): "True", ("metrics", "statsd_datadog_enabled"): "True"}):
+        with conf_vars(
+            {
+                ("metrics", "statsd_on"): "True",
+                ("metrics", "statsd_datadog_enabled"): "True",
+            }
+        ):
             importlib.reload(airflow.stats)
             assert isinstance(airflow.stats.Stats.dogstatsd, DogStatsd)
             assert not hasattr(airflow.stats.Stats, "statsd")
         importlib.reload(airflow.stats)
 
 
-class TestStatsWithAllowList:
-    def setup_method(self):
-        self.statsd_client = Mock(spec=statsd.StatsClient)
-        self.stats = SafeStatsdLogger(self.statsd_client, AllowListValidator("stats_one, stats_two"))
+class TestStatsAllowAndBlockLists:
+    @pytest.mark.parametrize(
+        "validator, stat_name, expect_incr",
+        [
+            (PatternAllowListValidator, "stats_one", True),
+            (PatternAllowListValidator, "stats_two.bla", True),
+            (PatternAllowListValidator, "stats_three.foo", True),
+            (PatternAllowListValidator, "stats_foo_three", True),
+            (PatternAllowListValidator, "stats_three", False),
+            (PatternBlockListValidator, "stats_one", False),
+            (PatternBlockListValidator, "stats_two.bla", False),
+            (PatternBlockListValidator, "stats_three.foo", False),
+            (PatternBlockListValidator, "stats_foo_three", False),
+            (PatternBlockListValidator, "stats_foo", False),
+            (PatternBlockListValidator, "stats_three", True),
+        ],
+    )
+    def test_allow_and_block_list(self, validator, stat_name, expect_incr):
+        statsd_client = Mock(spec=statsd.StatsClient)
+        stats = SafeStatsdLogger(statsd_client, validator("stats_one, stats_two, foo"))
 
-    def test_increment_counter_with_allowed_key(self):
-        self.stats.incr("stats_one")
-        self.statsd_client.incr.assert_called_once_with("stats_one", 1, 1)
+        stats.incr(stat_name)
 
-    def test_increment_counter_with_allowed_prefix(self):
-        self.stats.incr("stats_two.bla")
-        self.statsd_client.incr.assert_called_once_with("stats_two.bla", 1, 1)
+        if expect_incr:
+            statsd_client.incr.assert_called_once_with(stat_name, 1, 1)
+        else:
+            statsd_client.assert_not_called()
 
-    def test_not_increment_counter_if_not_allowed(self):
-        self.stats.incr("stats_three")
-        self.statsd_client.assert_not_called()
+    @pytest.mark.parametrize(
+        "match_pattern, expect_incr",
+        [
+            ("^stat", True),  # Match: Regex Startswith
+            ("a.{4}o", True),  # Match: RegEx Pattern
+            ("foo", True),  # Match: Any substring
+            ("stat", True),  # Match: Substring Startswith
+            ("^banana", False),  # No match
+        ],
+    )
+    def test_regex_matches(self, match_pattern, expect_incr):
+        stat_name = "stats_foo_one"
+        validator = PatternAllowListValidator
+
+        statsd_client = Mock(spec=statsd.StatsClient)
+        stats = SafeStatsdLogger(statsd_client, validator(match_pattern))
+
+        stats.incr(stat_name)
+
+        if expect_incr:
+            statsd_client.incr.assert_called_once_with(stat_name, 1, 1)
+        else:
+            statsd_client.assert_not_called()
 
 
-class TestStatsWithBlockList:
-    def setup_method(self):
-        self.statsd_client = Mock(spec=statsd.StatsClient)
-        self.stats = SafeStatsdLogger(self.statsd_client, BlockListValidator("stats_one, stats_two"))
+class TestPatternValidatorConfigOption:
+    def teardown_method(self):
+        # Avoid side-effects
+        importlib.reload(airflow.stats)
 
-    def test_increment_counter_with_allowed_key(self):
-        self.stats.incr("stats_one")
-        self.statsd_client.assert_not_called()
+    stats_on = {("metrics", "statsd_on"): "True"}
+    allow_list = {("metrics", "metrics_allow_list"): "foo,bar"}
+    block_list = {("metrics", "metrics_block_list"): "foo,bar"}
 
-    def test_increment_counter_with_allowed_prefix(self):
-        self.stats.incr("stats_two.bla")
-        self.statsd_client.assert_not_called()
+    @pytest.mark.parametrize(
+        "config, expected",
+        [
+            pytest.param(
+                {**stats_on},
+                PatternAllowListValidator,
+                id="pattern_allow_by_default",
+            ),
+            pytest.param(
+                {**stats_on, **allow_list},
+                PatternAllowListValidator,
+                id="pattern_allow_list_provided",
+            ),
+            pytest.param(
+                {**stats_on, **block_list},
+                PatternBlockListValidator,
+                id="pattern_block_list_provided",
+            ),
+            pytest.param(
+                {**stats_on, **allow_list, **block_list},
+                PatternAllowListValidator,
+                id="pattern_block_list_provided",
+            ),
+        ],
+    )
+    def test_pattern_picker(self, config, expected):
+        with conf_vars(config):
+            importlib.reload(airflow.stats)
 
-    def test_not_increment_counter_if_not_allowed(self):
-        self.stats.incr("stats_three")
-        self.statsd_client.incr.assert_called_once_with("stats_three", 1, 1)
+            assert isinstance(airflow.stats.Stats.statsd, statsd.StatsClient)
+            assert type(airflow.stats.Stats.instance.metrics_validator) is expected
+
+    @conf_vars({**stats_on, **block_list, ("metrics", "metrics_allow_list"): "baz,qux"})
+    def test_setting_allow_and_block_logs_warning(self, caplog):
+        importlib.reload(airflow.stats)
+
+        assert isinstance(airflow.stats.Stats.statsd, statsd.StatsClient)
+        assert type(airflow.stats.Stats.instance.metrics_validator) is PatternAllowListValidator
+        with caplog.at_level(logging.WARNING):
+            assert "Ignoring metrics_block_list" in caplog.text
 
 
 class TestDogStatsWithAllowList:
@@ -307,7 +389,9 @@ class TestDogStatsWithAllowList:
         from datadog import DogStatsd
 
         self.dogstatsd_client = Mock(speck=DogStatsd)
-        self.dogstats = SafeDogStatsdLogger(self.dogstatsd_client, AllowListValidator("stats_one, stats_two"))
+        self.dogstats = SafeDogStatsdLogger(
+            self.dogstatsd_client, PatternAllowListValidator("stats_one, stats_two")
+        )
 
     def test_increment_counter_with_allowed_key(self):
         self.dogstats.incr("stats_one")
@@ -350,7 +434,7 @@ class TestDogStatsWithDisabledMetricsTags:
         self.dogstatsd = SafeDogStatsdLogger(
             self.dogstatsd_client,
             metrics_tags=True,
-            metric_tags_validator=BlockListValidator("key1"),
+            metric_tags_validator=PatternBlockListValidator("key1"),
         )
 
     def test_does_send_stats_using_dogstatsd_with_tags(self):
@@ -372,7 +456,7 @@ class TestStatsWithInfluxDBEnabled:
             self.stats = SafeStatsdLogger(
                 self.statsd_client,
                 influxdb_tags_enabled=True,
-                metric_tags_validator=BlockListValidator("key2,key3"),
+                metric_tags_validator=PatternBlockListValidator("key2,key3"),
             )
 
     def test_increment_counter(self):
@@ -384,9 +468,13 @@ class TestStatsWithInfluxDBEnabled:
     def test_increment_counter_with_tags(self):
         self.stats.incr(
             "test_stats_run.delay",
-            tags={"key0": "val0", "key1": "val1", "key2": "val2"},
+            tags={"key0": 0, "key1": "val1", "key2": "val2"},
         )
-        self.statsd_client.incr.assert_called_once_with("test_stats_run.delay,key0=val0,key1=val1", 1, 1)
+        self.statsd_client.incr.assert_called_once_with("test_stats_run.delay,key0=0,key1=val1", 1, 1)
+
+    def test_increment_counter_with_tags_and_forward_slash(self):
+        self.stats.incr("test_stats_run.dag", tags={"path": "/some/path/dag.py"})
+        self.statsd_client.incr.assert_called_once_with("test_stats_run.dag,path=/some/path/dag.py", 1, 1)
 
     def test_does_not_increment_counter_drops_invalid_tags(self):
         self.stats.incr(

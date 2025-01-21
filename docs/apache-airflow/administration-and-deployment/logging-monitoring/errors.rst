@@ -49,7 +49,14 @@ The ``before_send`` option can be used to modify or drop events before they are 
     [sentry]
     before_send = path.to.my.sentry.before_send
 
-You can supply `additional configuration options <https://docs.sentry.io/platforms/python/configuration/options>`__ based on the Python platform via ``[sentry]`` section. Unsupported options: ``integrations``, ``in_app_include``, ``in_app_exclude``, ``ignore_errors``, ``before_breadcrumb``, ``transport``.
+The ``transport`` option can be used to change the transport used to send events to Sentry, and possibly other Systems. To set this option, provide a dotted path to a Transport class that the sentry SDK should be configured to use.
+
+.. code-block:: ini
+
+    [sentry]
+    transport = path.to.my.sentry.Transport
+
+You can supply `additional configuration options <https://docs.sentry.io/platforms/python/configuration/options>`__ based on the Python platform via ``[sentry]`` section. Unsupported options: ``integrations``, ``in_app_include``, ``in_app_exclude``, ``ignore_errors``, ``before_breadcrumb``.
 
 Tags
 -----
@@ -89,7 +96,7 @@ Impact of Sentry on Environment variables passed to Subprocess Hook
 
 When Sentry is enabled, by default it changes the standard library to pass all environment variables to
 subprocesses opened by Airflow. This changes the default behaviour of
-:class:`airflow.hooks.subprocess.SubprocessHook` - always all environment variables are passed to the
+:class:`airflow.providers.standard.hooks.subprocess.SubprocessHook` - always all environment variables are passed to the
 subprocess executed with specific set of environment variables. In this case not only the specified
 environment variables are passed but also all existing environment variables are passed with
 ``SUBPROCESS_`` prefix added. This happens also for all other subprocesses.

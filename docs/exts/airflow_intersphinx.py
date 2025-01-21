@@ -18,15 +18,16 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from provider_yaml_utils import load_package_data
-from sphinx.application import Sphinx
+
+if TYPE_CHECKING:
+    from sphinx.application import Sphinx
 
 CURRENT_DIR = os.path.dirname(__file__)
 ROOT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir, os.pardir))
 DOCS_DIR = os.path.join(ROOT_DIR, "docs")
-DOCS_PROVIDER_DIR = os.path.join(ROOT_DIR, "docs")
 
 
 def _create_init_py(app, config):
@@ -42,8 +43,7 @@ def _create_init_py(app, config):
 
 def _generate_provider_intersphinx_mapping():
     airflow_mapping = {}
-    for_production = os.environ.get("AIRFLOW_FOR_PRODUCTION", "false") == "true"
-    current_version = "stable" if for_production else "latest"
+    current_version = "stable"
 
     for provider in load_package_data():
         package_name = provider["package-name"]
@@ -71,7 +71,7 @@ def _generate_provider_intersphinx_mapping():
 
         airflow_mapping[pkg_name] = (
             # base URI
-            f'/docs/{pkg_name}/{"stable" if for_production else "latest"}/',
+            f"/docs/{pkg_name}/stable/",
             (doc_inventory if os.path.exists(doc_inventory) else cache_inventory,),
         )
     for pkg_name in ["apache-airflow-providers", "docker-stack"]:
@@ -125,7 +125,7 @@ if __name__ == "__main__":
             cache: dict[Any, Any] = {}
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 for name, (uri, invs) in intersphinx_mapping.values():
-                    pool.submit(fetch_inventory_group, name, uri, invs, cache, _MockApp(), now)
+                    pool.submit(fetch_inventory_group, name, uri, invs, cache, _MockApp(), now)  # type: ignore[arg-type]
 
             inv_dict = {}
             for uri, (name, now, invdata) in cache.items():
@@ -150,10 +150,9 @@ if __name__ == "__main__":
         def inspect_main(inv_data, name) -> None:
             try:
                 for key in sorted(inv_data or {}):
-                    for entry, _ in sorted(inv_data[key].items()):
-                        domain, object_type = key.split(":")
-                        role_name = domain_and_object_type_to_role(domain, object_type)
-
+                    domain, object_type = key.split(":")
+                    role_name = domain_and_object_type_to_role(domain, object_type)
+                    for entry in sorted(inv_data[key].keys()):
                         print(f":{role_name}:`{name}:{entry}`")
             except ValueError as exc:
                 print(exc.args[0] % exc.args[1:])

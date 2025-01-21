@@ -31,6 +31,11 @@ Prerequisite Tasks
 
 .. include:: ../_partials/prerequisite_tasks.rst
 
+Generic Parameters
+------------------
+
+.. include:: ../_partials/generic_parameters.rst
+
 Operators
 ---------
 
@@ -45,7 +50,7 @@ To publish a message to an Amazon SQS queue you can use the
 In the following example, the task ``publish_to_queue`` publishes a message containing
 the task instance and the execution date to a queue with a default name of ``Airflow-Example-Queue``.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_sqs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_sqs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_sqs]
@@ -61,8 +66,9 @@ Read messages from an Amazon SQS queue
 
 To read messages from an Amazon SQS queue until exhausted use the
 :class:`~airflow.providers.amazon.aws.sensors.sqs.SqsSensor`
+This sensor can also be run in deferrable mode by setting ``deferrable`` param to ``True``.
 
-.. exampleinclude:: /../../tests/system/providers/amazon/aws/example_sqs.py
+.. exampleinclude:: /../../providers/tests/system/amazon/aws/example_sqs.py
     :language: python
     :dedent: 4
     :start-after: [START howto_sensor_sqs]

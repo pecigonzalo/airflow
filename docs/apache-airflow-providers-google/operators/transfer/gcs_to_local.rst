@@ -24,7 +24,7 @@ This page shows how to download data from GCS to local filesystem.
 Prerequisite Tasks
 ^^^^^^^^^^^^^^^^^^
 
-.. include::/operators/_partials/prerequisite_tasks.rst
+.. include:: /operators/_partials/prerequisite_tasks.rst
 
 .. _howto/operator:GCSToLocalFilesystemOperator:
 
@@ -37,7 +37,7 @@ data from GCS to local filesystem.
 
 Below is an example of using this operator to download a file from GCS.
 
-.. exampleinclude:: /../../tests/system/providers/google/cloud/gcs/example_gcs_upload_download.py
+.. exampleinclude:: /../../providers/tests/system/google/cloud/gcs/example_gcs_upload_download.py
     :language: python
     :dedent: 0
     :start-after: [START howto_operator_gcs_download_file_task]
