@@ -19,18 +19,17 @@ from __future__ import annotations
 import concurrent
 import concurrent.futures
 import datetime
+import itertools
 import os
 import shutil
 import sys
 import traceback
-from itertools import repeat
+from collections.abc import Iterator
 from tempfile import NamedTemporaryFile
-from typing import Iterator
 
 import requests
 import urllib3.exceptions
 from requests.adapters import DEFAULT_POOLSIZE
-from sphinx.util.inventory import InventoryFileReader
 
 from airflow.utils.helpers import partition
 from docs.exts.docs_build.docs_builder import get_available_providers_packages
@@ -43,7 +42,7 @@ CACHE_DIR = os.path.join(DOCS_DIR, "_inventory_cache")
 EXPIRATION_DATE_PATH = os.path.join(DOCS_DIR, "_inventory_cache", "expiration-date")
 
 S3_DOC_URL = "http://apache-airflow-docs.s3-website.eu-central-1.amazonaws.com"
-S3_DOC_URL_VERSIONED = S3_DOC_URL + "/docs/{package_name}/latest/objects.inv"
+S3_DOC_URL_VERSIONED = S3_DOC_URL + "/docs/{package_name}/stable/objects.inv"
 S3_DOC_URL_NON_VERSIONED = S3_DOC_URL + "/docs/{package_name}/objects.inv"
 
 
@@ -73,7 +72,7 @@ def _fetch_file(session: requests.Session, package_name: str, url: str, path: st
         tf.flush()
         tf.seek(0, 0)
 
-        line = InventoryFileReader(tf).readline()
+        line = tf.readline().decode()
         if not line.startswith("# Sphinx inventory version"):
             print(f"{package_name}: Response contain unexpected Sphinx Inventory header: {line!r}.")
             return package_name, False
@@ -142,7 +141,7 @@ def fetch_inventories():
     with requests.Session() as session, concurrent.futures.ThreadPoolExecutor(DEFAULT_POOLSIZE) as pool:
         download_results: Iterator[tuple[str, bool]] = pool.map(
             _fetch_file,
-            repeat(session, len(to_download)),
+            itertools.repeat(session, len(to_download)),
             (pkg_name for pkg_name, _, _ in to_download),
             (url for _, url, _ in to_download),
             (path for _, _, path in to_download),

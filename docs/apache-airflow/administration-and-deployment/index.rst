@@ -24,7 +24,6 @@ This section contains information about deploying DAGs into production and the a
     :maxdepth: 2
 
     production-deployment
-    security/index
     logging-monitoring/index
     kubernetes
     lineage
@@ -32,6 +31,7 @@ This section contains information about deploying DAGs into production and the a
     dag-serialization
     modules_management
     scheduler
+    dagfile-processing
     pools
     cluster-policies
     priority-weight

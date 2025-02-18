@@ -29,6 +29,7 @@ from operator import attrgetter
 import rich_click as click
 
 from airflow.jobs.job import run_job
+from airflow.utils.types import DagRunTriggeredByType
 
 MAX_DAG_RUNS_ALLOWED = 1
 
@@ -63,11 +64,11 @@ class ShortCircuitExecutorMixin:
         Change the state of scheduler by waiting till the tasks is complete
         and then shut down the scheduler after the task is complete
         """
-        from airflow.utils.state import State
+        from airflow.utils.state import TaskInstanceState
 
         super().change_state(key, state, info=info)
 
-        dag_id, _, execution_date, __ = key
+        dag_id, _, logical_date, __ = key
         if dag_id not in self.dags_to_watch:
             return
 
@@ -75,16 +76,15 @@ class ShortCircuitExecutorMixin:
         # check the DR.state - so instead we need to check the state of the
         # tasks in that run
 
-        run = self.dags_to_watch[dag_id].runs.get(execution_date)
+        run = self.dags_to_watch[dag_id].runs.get(logical_date)
         if not run:
             import airflow.models
 
-            # odd `list()` is to work across Airflow versions.
-            run = list(airflow.models.DagRun.find(dag_id=dag_id, execution_date=execution_date))[0]
-            self.dags_to_watch[dag_id].runs[execution_date] = run
+            run = airflow.models.DagRun.find(dag_id=dag_id, logical_date=logical_date)[0]
+            self.dags_to_watch[dag_id].runs[logical_date] = run
 
-        if run and all(t.state == State.SUCCESS for t in run.get_task_instances()):
-            self.dags_to_watch[dag_id].runs.pop(execution_date)
+        if run and all(t.state == TaskInstanceState.SUCCESS for t in run.get_task_instances()):
+            self.dags_to_watch[dag_id].runs.pop(logical_date)
             self.dags_to_watch[dag_id].waiting_for -= 1
 
             if self.dags_to_watch[dag_id].waiting_for == 0:
@@ -92,7 +92,7 @@ class ShortCircuitExecutorMixin:
 
             if not self.dags_to_watch:
                 self.log.warning("STOPPING SCHEDULER -- all runs complete")
-                self.job_runner.processor_agent._done = True
+                self.job_runner.num_runs = 1
                 return
         self.log.warning(
             "WAITING ON %d RUNS", sum(map(attrgetter("waiting_for"), self.dags_to_watch.values()))
@@ -107,7 +107,7 @@ def get_executor_under_test(dotted_path):
     from airflow.executors.executor_loader import ExecutorLoader
 
     if dotted_path == "MockExecutor":
-        from tests.test_utils.mock_executor import MockExecutor as executor
+        from tests_common.test_utils.mock_executor import MockExecutor as executor
 
     else:
         executor = ExecutorLoader.load_executor(dotted_path)
@@ -133,13 +133,11 @@ def reset_dag(dag, session):
     DR = airflow.models.DagRun
     DM = airflow.models.DagModel
     TI = airflow.models.TaskInstance
-    TF = airflow.models.TaskFail
     dag_id = dag.dag_id
 
     session.query(DM).filter(DM.dag_id == dag_id).update({"is_paused": False})
     session.query(DR).filter(DR.dag_id == dag_id).delete()
     session.query(TI).filter(TI.dag_id == dag_id).delete()
-    session.query(TF).filter(TF.dag_id == dag_id).delete()
 
 
 def pause_all_dags(session):
@@ -156,7 +154,7 @@ def create_dag_runs(dag, num_runs, session):
     Create  `num_runs` of dag runs for sub-sequent schedules
     """
     from airflow.utils import timezone
-    from airflow.utils.state import State
+    from airflow.utils.state import DagRunState
 
     try:
         from airflow.utils.types import DagRunType
@@ -173,10 +171,15 @@ def create_dag_runs(dag, num_runs, session):
         logical_date = next_info.logical_date
         dag.create_dagrun(
             run_id=f"{id_prefix}{logical_date.isoformat()}",
-            execution_date=logical_date,
-            start_date=timezone.utcnow(),
-            state=State.RUNNING,
+            logical_date=logical_date,
+            data_interval=(logical_date, logical_date),
+            run_after=logical_date,
+            run_type=DagRunType.MANUAL,
+            triggered_by=DagRunTriggeredByType.TEST,
             external_trigger=False,
+            dag_version=None,
+            state=DagRunState.RUNNING,
+            start_date=timezone.utcnow(),
             session=session,
         )
         last_dagrun_data_interval = next_info.data_interval
@@ -268,8 +271,7 @@ def main(num_runs, repeat, pre_create_dag_runs, executor_class, dag_ids):
             if end_date != next_info.logical_date:
                 message = (
                     f"DAG {dag_id} has incorrect end_date ({end_date}) for number of runs! "
-                    f"It should be "
-                    f" {next_info.logical_date}"
+                    f"It should be {next_info.logical_date}"
                 )
                 sys.exit(message)
 
@@ -280,7 +282,7 @@ def main(num_runs, repeat, pre_create_dag_runs, executor_class, dag_ids):
 
     executor = ShortCircuitExecutor(dag_ids_to_watch=dag_ids, num_runs=num_runs)
     scheduler_job = Job(executor=executor)
-    job_runner = SchedulerJobRunner(job=scheduler_job, dag_ids=dag_ids, do_pickle=False)
+    job_runner = SchedulerJobRunner(job=scheduler_job, dag_ids=dag_ids)
     executor.job_runner = job_runner
 
     total_tasks = sum(len(dag.tasks) for dag in dags)
@@ -294,38 +296,33 @@ def main(num_runs, repeat, pre_create_dag_runs, executor_class, dag_ids):
 
     # Need a lambda to refer to the _latest_ value for scheduler_job, not just
     # the initial one
-    code_to_test = lambda: run_job(job=job_runner.job, execute_callable=job_runner._execute)
+    def code_to_test():
+        run_job(job=job_runner.job, execute_callable=job_runner._execute)
 
     for count in range(repeat):
-        gc.disable()
-        start = time.perf_counter()
-
-        code_to_test()
-        times.append(time.perf_counter() - start)
-        gc.enable()
-        print("Run %d time: %.5f" % (count + 1, times[-1]))
-
-        if count + 1 != repeat:
+        if not count:
             with db.create_session() as session:
                 for dag in dags:
                     reset_dag(dag, session)
-
             executor.reset(dag_ids)
             scheduler_job = Job(executor=executor)
-            job_runner = SchedulerJobRunner(job=scheduler_job, dag_ids=dag_ids, do_pickle=False)
+            job_runner = SchedulerJobRunner(job=scheduler_job, dag_ids=dag_ids)
             executor.scheduler_job = scheduler_job
 
-    print()
-    print()
-    msg = "Time for %d dag runs of %d dags with %d total tasks: %.4fs"
+        gc.disable()
+        start = time.perf_counter()
+        code_to_test()
+        times.append(time.perf_counter() - start)
+        gc.enable()
+        print(f"Run {count + 1} time: {times[-1]:.5f}")
 
+    print()
+    print()
+    print(f"Time for {num_runs} dag runs of {len(dags)} dags with {total_tasks} total tasks: ", end="")
     if len(times) > 1:
-        print(
-            (msg + " (±%.3fs)")
-            % (num_runs, len(dags), total_tasks, statistics.mean(times), statistics.stdev(times))
-        )
+        print(f"{statistics.mean(times):.4f}s (±{statistics.stdev(times):.3f}s)")
     else:
-        print(msg % (num_runs, len(dags), total_tasks, times[0]))
+        print(f"{times[0]:.4f}s")
 
     print()
     print()

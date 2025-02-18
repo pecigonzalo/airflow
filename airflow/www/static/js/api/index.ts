@@ -32,14 +32,16 @@ import useMarkTaskDryRun from "./useMarkTaskDryRun";
 import useGraphData from "./useGraphData";
 import useGridData from "./useGridData";
 import useMappedInstances from "./useMappedInstances";
-import useDatasets from "./useDatasets";
-import useDataset from "./useDataset";
-import useDatasetDependencies from "./useDatasetDependencies";
-import useDatasetEvents from "./useDatasetEvents";
+import useAssets from "./useAssets";
+import useAssetsSummary from "./useAssetsSummary";
+import useAsset from "./useAsset";
+import useAssetDependencies from "./useAssetDependencies";
+import useAssetEvents from "./useAssetEvents";
 import useSetDagRunNote from "./useSetDagRunNote";
 import useSetTaskInstanceNote from "./useSetTaskInstanceNote";
-import useUpstreamDatasetEvents from "./useUpstreamDatasetEvents";
+import useUpstreamAssetEvents from "./useUpstreamAssetEvents";
 import useTaskInstance from "./useTaskInstance";
+import useTaskFailedDependency from "./useTaskFailedDependency";
 import useDag from "./useDag";
 import useDagCode from "./useDagCode";
 import useDagDetails from "./useDagDetails";
@@ -48,10 +50,30 @@ import usePools from "./usePools";
 import useDags from "./useDags";
 import useDagRuns from "./useDagRuns";
 import useHistoricalMetricsData from "./useHistoricalMetricsData";
+import { useTaskXcomEntry, useTaskXcomCollection } from "./useTaskXcom";
+import useEventLogs from "./useEventLogs";
+import useCalendarData from "./useCalendarData";
+import useCreateAssetEvent from "./useCreateAssetEvent";
+import useRenderedK8s from "./useRenderedK8s";
+import useTaskDetail from "./useTaskDetail";
+import useTIHistory from "./useTIHistory";
 
-axios.interceptors.response.use((res: AxiosResponse) =>
-  res.data ? camelcaseKeys(res.data, { deep: true }) : res
-);
+axios.interceptors.request.use((config) => {
+  config.paramsSerializer = {
+    indexes: null,
+  };
+  return config;
+});
+
+axios.interceptors.response.use((res: AxiosResponse) => {
+  // Do not camelCase rendered_fields or extra
+  const stopPaths = ["rendered_fields", "extra", "asset_events.extra"];
+  // Do not camelCase xCom entry results
+  if (res.config.url?.includes("/xcomEntries/")) {
+    stopPaths.push("value");
+  }
+  return res.data ? camelcaseKeys(res.data, { deep: true, stopPaths }) : res;
+});
 
 axios.defaults.headers.common.Accept = "application/json";
 
@@ -63,10 +85,11 @@ export {
   useDagDetails,
   useDagRuns,
   useDags,
-  useDataset,
-  useDatasetDependencies,
-  useDatasetEvents,
-  useDatasets,
+  useAsset,
+  useAssets,
+  useAssetDependencies,
+  useAssetEvents,
+  useAssetsSummary,
   useExtraLinks,
   useGraphData,
   useGridData,
@@ -82,6 +105,15 @@ export {
   useSetDagRunNote,
   useSetTaskInstanceNote,
   useTaskInstance,
-  useUpstreamDatasetEvents,
+  useUpstreamAssetEvents,
   useHistoricalMetricsData,
+  useTaskXcomEntry,
+  useTaskXcomCollection,
+  useTaskFailedDependency,
+  useEventLogs,
+  useCalendarData,
+  useCreateAssetEvent,
+  useRenderedK8s,
+  useTaskDetail,
+  useTIHistory,
 };

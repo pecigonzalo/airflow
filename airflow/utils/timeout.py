@@ -19,14 +19,14 @@ from __future__ import annotations
 
 import os
 import signal
+from contextlib import AbstractContextManager
 from threading import Timer
-from typing import ContextManager
 
 from airflow.exceptions import AirflowTaskTimeout
 from airflow.utils.log.logging_mixin import LoggingMixin
 from airflow.utils.platform import IS_WINDOWS
 
-_timeout = ContextManager[None]
+_timeout = AbstractContextManager[None]
 
 
 class TimeoutWindows(_timeout, LoggingMixin):
@@ -39,7 +39,7 @@ class TimeoutWindows(_timeout, LoggingMixin):
         self.error_message = error_message + ", PID: " + str(os.getpid())
 
     def handle_timeout(self, *args):
-        """Logs information and raises AirflowTaskTimeout."""
+        """Log information and raises AirflowTaskTimeout."""
         self.log.error("Process timed out, PID: %s", str(os.getpid()))
         raise AirflowTaskTimeout(self.error_message)
 
@@ -64,7 +64,7 @@ class TimeoutPosix(_timeout, LoggingMixin):
         self.error_message = error_message + ", PID: " + str(os.getpid())
 
     def handle_timeout(self, signum, frame):
-        """Logs information and raises AirflowTaskTimeout."""
+        """Log information and raises AirflowTaskTimeout."""
         self.log.error("Process timed out, PID: %s", str(os.getpid()))
         raise AirflowTaskTimeout(self.error_message)
 

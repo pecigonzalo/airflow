@@ -17,11 +17,10 @@
  * under the License.
  */
 
-/* global describe, test, expect, jest */
+/* global describe, test, expect, jest, moment */
 
 import React from "react";
 import { render } from "@testing-library/react";
-import moment from "moment-timezone";
 
 import { TableWrapper } from "src/utils/testUtils";
 import * as useGridDataModule from "src/api/useGridData";
@@ -41,13 +40,13 @@ const generateRuns = (length: number): DagRun[] =>
     startDate: "2021-11-08T21:14:19.704433+00:00",
     endDate: "2021-11-08T21:17:13.206426+00:00",
     lastSchedulingDecision: datestring,
-    executionDate: datestring,
+    logicalDate: datestring,
     externalTrigger: false,
     conf: null,
-    confIsJson: false,
     note: "someRandomValue",
   }));
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 describe("Test DagRuns", () => {
   test("Durations and manual run arrow render correctly, but without any date ticks", () => {
     const dagRuns: DagRun[] = [
@@ -60,11 +59,10 @@ describe("Test DagRuns", () => {
         endDate: "2021-11-08T21:17:13.206426+00:00",
         state: "failed",
         runType: "scheduled",
-        executionDate: "2021-11-08T21:14:19.704433+00:00",
+        logicalDate: "2021-11-08T21:14:19.704433+00:00",
         lastSchedulingDecision: datestring,
         externalTrigger: false,
         conf: null,
-        confIsJson: false,
         note: "someRandomValue",
       },
       {
@@ -76,11 +74,10 @@ describe("Test DagRuns", () => {
         queuedAt: "2021-11-08T21:14:18.21521+00:00",
         startDate: "2021-11-09T00:19:43.023200+00:00",
         endDate: "2021-11-09T00:22:18.607167+00:00",
-        executionDate: "2021-11-08T21:14:19.704433+00:00",
+        logicalDate: "2021-11-08T21:14:19.704433+00:00",
         lastSchedulingDecision: datestring,
         externalTrigger: false,
         conf: null,
-        confIsJson: false,
         note: "someRandomValue",
       },
     ];
@@ -104,7 +101,8 @@ describe("Test DagRuns", () => {
     expect(getByText("00:02:53")).toBeInTheDocument();
     expect(getByText("00:01:26")).toBeInTheDocument();
     expect(
-      queryByText(moment.utc(dagRuns[0].executionDate).format("MMM DD, HH:mm"))
+      // @ts-ignore
+      queryByText(moment.utc(dagRuns[0].logicalDate).format("MMM DD, HH:mm"))
     ).toBeNull();
 
     spy.mockRestore();
@@ -123,6 +121,7 @@ describe("Test DagRuns", () => {
     );
     const { getByText } = render(<DagRuns />, { wrapper: TableWrapper });
     expect(
+      // @ts-ignore
       getByText(moment.utc(datestring).format("MMM DD, HH:mm"))
     ).toBeInTheDocument();
     spy.mockRestore();
@@ -141,6 +140,7 @@ describe("Test DagRuns", () => {
     );
     const { queryAllByText } = render(<DagRuns />, { wrapper: TableWrapper });
     expect(
+      // @ts-ignore
       queryAllByText(moment.utc(datestring).format("MMM DD, HH:mm"))
     ).toHaveLength(1);
     spy.mockRestore();
@@ -159,6 +159,7 @@ describe("Test DagRuns", () => {
     );
     const { queryAllByText } = render(<DagRuns />, { wrapper: TableWrapper });
     expect(
+      // @ts-ignore
       queryAllByText(moment.utc(datestring).format("MMM DD, HH:mm"))
     ).toHaveLength(2);
     spy.mockRestore();

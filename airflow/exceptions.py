@@ -18,15 +18,22 @@
 # Note: Any AirflowException raised is expected to cause the TaskInstance
 #       to be marked in an ERROR state
 """Exceptions used by Airflow."""
+
 from __future__ import annotations
 
-import datetime
 import warnings
+from collections.abc import Collection
+from datetime import timedelta
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any, NamedTuple, Sized
+from typing import TYPE_CHECKING, Any, NamedTuple
+
+from airflow.utils.trigger_rule import TriggerRule
 
 if TYPE_CHECKING:
-    from airflow.models import DAG, DagRun
+    from collections.abc import Sized
+
+    from airflow.models import DagRun
+    from airflow.sdk.definitions.asset import AssetUniqueKey
 
 
 class AirflowException(Exception):
@@ -37,6 +44,10 @@ class AirflowException(Exception):
     """
 
     status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+
+    def serialize(self):
+        cls = self.__class__
+        return f"{cls.__module__}.{cls.__name__}", (str(self),), {}
 
 
 class AirflowBadRequest(AirflowException):
@@ -70,13 +81,24 @@ class AirflowRescheduleException(AirflowException):
         super().__init__()
         self.reschedule_date = reschedule_date
 
+    def serialize(self):
+        cls = self.__class__
+        return f"{cls.__module__}.{cls.__name__}", (), {"reschedule_date": self.reschedule_date}
+
 
 class InvalidStatsNameException(AirflowException):
     """Raise when name of the stats is invalid."""
 
 
-class AirflowTaskTimeout(AirflowException):
+# Important to inherit BaseException instead of AirflowException->Exception, since this Exception is used
+# to explicitly interrupt ongoing task. Code that does normal error-handling should not treat
+# such interrupt as an error that can be handled normally. (Compare with KeyboardInterrupt)
+class AirflowTaskTimeout(BaseException):
     """Raise when the task execution times-out."""
+
+
+class AirflowTaskTerminated(BaseException):
+    """Raise when the task execution is terminated."""
 
 
 class AirflowWebServerTimeout(AirflowException):
@@ -91,8 +113,47 @@ class AirflowFailException(AirflowException):
     """Raise when the task should be failed without retrying."""
 
 
+class AirflowExecuteWithInactiveAssetExecption(AirflowFailException):
+    """Raise when the task is executed with inactive assets."""
+
+    def __init__(self, inactive_asset_unikeys: Collection[AssetUniqueKey]) -> None:
+        self.inactive_asset_unique_keys = inactive_asset_unikeys
+
+    @property
+    def inactive_assets_error_msg(self):
+        return ", ".join(
+            f'Asset(name="{key.name}", uri="{key.uri}")' for key in self.inactive_asset_unique_keys
+        )
+
+
+class AirflowInactiveAssetInInletOrOutletException(AirflowExecuteWithInactiveAssetExecption):
+    """Raise when the task is executed with inactive assets in its inlet or outlet."""
+
+    def __str__(self) -> str:
+        return f"Task has the following inactive assets in its inlets or outlets: {self.inactive_assets_error_msg}"
+
+
+class AirflowInactiveAssetAddedToAssetAliasException(AirflowExecuteWithInactiveAssetExecption):
+    """Raise when inactive assets are added to an asset alias."""
+
+    def __str__(self) -> str:
+        return (
+            f"The following assets accessed by an AssetAlias are inactive: {self.inactive_assets_error_msg}"
+        )
+
+
 class AirflowOptionalProviderFeatureException(AirflowException):
     """Raise by providers when imports are missing for optional provider features."""
+
+
+class AirflowInternalRuntimeError(BaseException):
+    """
+    Airflow Internal runtime error.
+
+    Indicates that something really terrible happens during the Airflow execution.
+
+    :meta private:
+    """
 
 
 class XComNotFound(AirflowException):
@@ -107,9 +168,13 @@ class XComNotFound(AirflowException):
     def __str__(self) -> str:
         return f'XComArg result from {self.task_id} at {self.dag_id} with key="{self.key}" is not found!'
 
-
-class UnmappableOperator(AirflowException):
-    """Raise when an operator is not implemented to be mappable."""
+    def serialize(self):
+        cls = self.__class__
+        return (
+            f"{cls.__module__}.{cls.__name__}",
+            (),
+            {"dag_id": self.dag_id, "task_id": self.task_id, "key": self.key},
+        )
 
 
 class XComForMappingNotPushed(AirflowException):
@@ -161,16 +226,16 @@ class AirflowDagDuplicatedIdException(AirflowException):
         return f"Ignoring DAG {self.dag_id} from {self.incoming} - also found in {self.existing}"
 
 
-class AirflowDagInconsistent(AirflowException):
-    """Raise when a DAG has inconsistent attributes."""
-
-
 class AirflowClusterPolicyViolation(AirflowException):
     """Raise when there is a violation of a Cluster Policy in DAG definition."""
 
 
+class AirflowClusterPolicySkipDag(AirflowException):
+    """Raise when skipping dag is needed in Cluster Policy."""
+
+
 class AirflowClusterPolicyError(AirflowException):
-    """Raise when there is an error except AirflowClusterPolicyViolation in Cluster Policy."""
+    """Raise for a Cluster Policy other than AirflowClusterPolicyViolation or AirflowClusterPolicySkipDag."""
 
 
 class AirflowTimetableInvalid(AirflowException):
@@ -192,11 +257,28 @@ class DagRunNotFound(AirflowNotFoundException):
 class DagRunAlreadyExists(AirflowBadRequest):
     """Raise when creating a DAG run for DAG which already has DAG run entry."""
 
-    def __init__(self, dag_run: DagRun, execution_date: datetime.datetime, run_id: str) -> None:
-        super().__init__(
-            f"A DAG Run already exists for DAG {dag_run.dag_id} at {execution_date} with run id {run_id}"
-        )
+    def __init__(self, dag_run: DagRun) -> None:
+        super().__init__(f"A DAG Run already exists for DAG {dag_run.dag_id} with run id {dag_run.run_id}")
         self.dag_run = dag_run
+
+    def serialize(self):
+        cls = self.__class__
+        # Note the DagRun object will be detached here and fails serialization, we need to create a new one
+        from airflow.models import DagRun
+
+        dag_run = DagRun(
+            state=self.dag_run.state,
+            dag_id=self.dag_run.dag_id,
+            run_id=self.dag_run.run_id,
+            external_trigger=self.dag_run.external_trigger,
+            run_type=self.dag_run.run_type,
+        )
+        dag_run.id = self.dag_run.id
+        return (
+            f"{cls.__module__}.{cls.__name__}",
+            (),
+            {"dag_run": dag_run},
+        )
 
 
 class DagFileExists(AirflowBadRequest):
@@ -207,20 +289,23 @@ class DagFileExists(AirflowBadRequest):
         warnings.warn("DagFileExists is deprecated and will be removed.", DeprecationWarning, stacklevel=2)
 
 
-class DagInvalidTriggerRule(AirflowException):
-    """Raise when a dag has 'fail_stop' enabled yet has a non-default trigger rule."""
+class FailFastDagInvalidTriggerRule(AirflowException):
+    """Raise when a dag has 'fail_fast' enabled yet has a non-default trigger rule."""
+
+    _allowed_rules = (TriggerRule.ALL_SUCCESS, TriggerRule.ALL_DONE_SETUP_SUCCESS)
 
     @classmethod
-    def check(cls, dag: DAG | None, trigger_rule: str):
-        from airflow.models.abstractoperator import DEFAULT_TRIGGER_RULE
+    def check(cls, *, fail_fast: bool, trigger_rule: TriggerRule):
+        """
+        Check that fail_fast dag tasks have allowable trigger rules.
 
-        if dag is not None and dag.fail_stop and trigger_rule != DEFAULT_TRIGGER_RULE:
+        :meta private:
+        """
+        if fail_fast and trigger_rule not in cls._allowed_rules:
             raise cls()
 
     def __str__(self) -> str:
-        from airflow.models.abstractoperator import DEFAULT_TRIGGER_RULE
-
-        return f"A 'fail-stop' dag can only have {DEFAULT_TRIGGER_RULE} trigger rule"
+        return f"A 'fail_fast' dag can only have {TriggerRule.ALL_SUCCESS} trigger rule"
 
 
 class DuplicateTaskIdFound(AirflowException):
@@ -262,31 +347,6 @@ class TaskInstanceNotFound(AirflowNotFoundException):
 
 class PoolNotFound(AirflowNotFoundException):
     """Raise when a Pool is not available in the system."""
-
-
-class NoAvailablePoolSlot(AirflowException):
-    """Raise when there is not enough slots in pool."""
-
-
-class DagConcurrencyLimitReached(AirflowException):
-    """Raise when DAG max_active_tasks limit is reached."""
-
-
-class TaskConcurrencyLimitReached(AirflowException):
-    """Raise when task max_active_tasks limit is reached."""
-
-
-class BackfillUnfinished(AirflowException):
-    """
-    Raises when not all tasks succeed in backfill.
-
-    :param message: The human-readable description of the exception
-    :param ti_status: The information about all task statuses
-    """
-
-    def __init__(self, message, ti_status):
-        super().__init__(message)
-        self.ti_status = ti_status
 
 
 class FileSyntaxError(NamedTuple):
@@ -340,7 +400,10 @@ class TaskDeferred(BaseException):
     Signal an operator moving to deferred state.
 
     Special exception raised to signal that the operator it was raised from
-    wishes to defer until a trigger fires.
+    wishes to defer until a trigger fires. Triggers can send execution back to task or end the task instance
+    directly. If the trigger should end the task instance itself, ``method_name`` does not matter,
+    and can be None; otherwise, provide the name of the method that should be used when
+    resuming execution in the task.
     """
 
     def __init__(
@@ -349,16 +412,33 @@ class TaskDeferred(BaseException):
         trigger,
         method_name: str,
         kwargs: dict[str, Any] | None = None,
-        timeout: datetime.timedelta | None = None,
+        timeout: timedelta | int | float | None = None,
     ):
         super().__init__()
         self.trigger = trigger
         self.method_name = method_name
         self.kwargs = kwargs
-        self.timeout = timeout
+        self.timeout: timedelta | None
         # Check timeout type at runtime
+        if isinstance(timeout, (int, float)):
+            self.timeout = timedelta(seconds=timeout)
+        else:
+            self.timeout = timeout
         if self.timeout is not None and not hasattr(self.timeout, "total_seconds"):
             raise ValueError("Timeout value must be a timedelta")
+
+    def serialize(self):
+        cls = self.__class__
+        return (
+            f"{cls.__module__}.{cls.__name__}",
+            (),
+            {
+                "trigger": self.trigger,
+                "method_name": self.method_name,
+                "kwargs": self.kwargs,
+                "timeout": self.timeout,
+            },
+        )
 
     def __repr__(self) -> str:
         return f"<TaskDeferred trigger={self.trigger} method={self.method_name}>"
@@ -368,16 +448,43 @@ class TaskDeferralError(AirflowException):
     """Raised when a task failed during deferral for some reason."""
 
 
-class PodMutationHookException(AirflowException):
-    """Raised when exception happens during Pod Mutation Hook execution."""
+class TaskDeferralTimeout(AirflowException):
+    """Raise when there is a timeout on the deferral."""
 
 
-class PodReconciliationError(AirflowException):
-    """Raised when an error is encountered while trying to merge pod configs."""
+# The try/except handling is needed after we moved all k8s classes to cncf.kubernetes provider
+# These two exceptions are used internally by Kubernetes Executor but also by PodGenerator, so we need
+# to leave them here in case older version of cncf.kubernetes provider is used to run KubernetesPodOperator
+# and it raises one of those exceptions. The code should be backwards compatible even if you import
+# and try/except the exception using direct imports from airflow.exceptions.
+# 1) if you have old provider, both provider and pod generator will throw the "airflow.exceptions" exception.
+# 2) if you have new provider, both provider and pod generator will throw the
+#    "airflow.providers.cncf.kubernetes" as it will be imported here from the provider.
+try:
+    from airflow.providers.cncf.kubernetes.exceptions import PodMutationHookException
+except ImportError:
+
+    class PodMutationHookException(AirflowException):  # type: ignore[no-redef]
+        """Raised when exception happens during Pod Mutation Hook execution."""
+
+
+try:
+    from airflow.providers.cncf.kubernetes.exceptions import PodReconciliationError
+except ImportError:
+
+    class PodReconciliationError(AirflowException):  # type: ignore[no-redef]
+        """Raised when an error is encountered while trying to merge pod configs."""
 
 
 class RemovedInAirflow3Warning(DeprecationWarning):
     """Issued for usage of deprecated features that will be removed in Airflow3."""
+
+    deprecated_since: str | None = None
+    "Indicates the airflow version that started raising this deprecation warning"
+
+
+class RemovedInAirflow4Warning(DeprecationWarning):
+    """Issued for usage of deprecated features that will be removed in Airflow4."""
 
     deprecated_since: str | None = None
     "Indicates the airflow version that started raising this deprecation warning"
@@ -398,3 +505,7 @@ class DeserializingResultError(ValueError):
             "Error deserializing result. Note that result deserialization "
             "is not supported across major Python versions. Cause: " + str(self.__cause__)
         )
+
+
+class UnknownExecutorException(ValueError):
+    """Raised when an attempt is made to load an executor which is not configured."""

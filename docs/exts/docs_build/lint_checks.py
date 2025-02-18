@@ -17,11 +17,13 @@
 from __future__ import annotations
 
 import ast
+import itertools
 import os
 import re
+from collections.abc import Iterable
 from glob import glob
-from itertools import chain
-from typing import Iterable
+from pathlib import Path
+from typing import Any
 
 from docs.exts.docs_build.docs_builder import ALL_PROVIDER_YAMLS
 from docs.exts.docs_build.errors import DocBuildError
@@ -31,6 +33,7 @@ ROOT_PROJECT_DIR = os.path.abspath(
 )
 ROOT_PACKAGE_DIR = os.path.join(ROOT_PROJECT_DIR, "airflow")
 DOCS_DIR = os.path.join(ROOT_PROJECT_DIR, "docs")
+PROVIDERS_DIR = os.path.join(ROOT_PROJECT_DIR, "providers")
 
 
 def find_existing_guide_operator_names(src_dir_pattern: str) -> set[str]:
@@ -87,7 +90,7 @@ def check_guide_links_in_operator_descriptions() -> list[DocBuildError]:
             operator_names=find_existing_guide_operator_names(
                 f"{DOCS_DIR}/apache-airflow/howto/operator/**/*.rst"
             ),
-            python_module_paths=chain(
+            python_module_paths=itertools.chain(
                 glob(f"{ROOT_PACKAGE_DIR}/operators/*.py"),
                 glob(f"{ROOT_PACKAGE_DIR}/sensors/*.py"),
             ),
@@ -101,7 +104,7 @@ def check_guide_links_in_operator_descriptions() -> list[DocBuildError]:
         }
 
         # Extract all potential python modules that can contain operators
-        python_module_paths = chain(
+        python_module_paths = itertools.chain(
             glob(f"{provider['package-dir']}/**/operators/*.py", recursive=True),
             glob(f"{provider['package-dir']}/**/sensors/*.py", recursive=True),
             glob(f"{provider['package-dir']}/**/transfers/*.py", recursive=True),
@@ -270,14 +273,23 @@ def find_example_dags(provider_dir):
     yield from glob(f"{ROOT_PROJECT_DIR}/tests/system/{system_tests_dir}/*/", recursive=True)
 
 
+def get_indexfile(provider: dict[str, Any]) -> Path:
+    package_name = provider["package-name"]
+    provider_id = provider["package-name"].replace("apache-airflow-providers-", "").replace("-", ".")
+    candidate = Path(PROVIDERS_DIR).joinpath(*provider_id.split(".")) / "docs" / "index.rst"
+    if candidate.exists():
+        return candidate
+    raise ValueError(f"The index.rst for {package_name} does not exist at {candidate}")
+
+
 def check_pypi_repository_in_provider_tocs() -> list[DocBuildError]:
     """Checks that each documentation for provider packages has a link to PyPI files in the TOC."""
     build_errors = []
     for provider in ALL_PROVIDER_YAMLS:
-        doc_file_path = f"{DOCS_DIR}/{provider['package-name']}/index.rst"
+        doc_file_path = get_indexfile(provider)
         expected_text = f"PyPI Repository <https://pypi.org/project/{provider['package-name']}/>"
         build_error = assert_file_contains(
-            file_path=doc_file_path,
+            file_path=doc_file_path.as_posix(),
             pattern=re.escape(expected_text),
             message=(
                 f"A link to the PyPI in table of contents is missing. Can you please add it?\n\n"

@@ -16,6 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """This dag only runs some simple tasks to test Airflow's task execution."""
+
 from __future__ import annotations
 
 # [START dag]
@@ -24,7 +25,7 @@ import datetime
 import pendulum
 
 from airflow.models.dag import DAG
-from airflow.operators.empty import EmptyOperator
+from airflow.providers.standard.operators.empty import EmptyOperator
 
 now = pendulum.now(tz="UTC")
 now_to_the_hour = (now - datetime.timedelta(0, 0, 0, 0, 0, 3)).replace(minute=0, second=0, microsecond=0)

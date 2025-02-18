@@ -18,9 +18,8 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pendulum
 import pytest
-from pendulum import DateTime
-from pendulum.tz.timezone import Timezone
 
 from airflow.api_connexion.exceptions import BadRequest
 from airflow.api_connexion.parameters import (
@@ -30,7 +29,8 @@ from airflow.api_connexion.parameters import (
     validate_istimezone,
 )
 from airflow.utils import timezone
-from tests.test_utils.config import conf_vars
+
+from tests_common.test_utils.config import conf_vars
 
 
 class TestValidateIsTimezone:
@@ -106,7 +106,7 @@ class TestFormatParameters:
 
         decorated_endpoint(param_a="2020-01-01T0:0:00+00:00")
 
-        endpoint.assert_called_once_with(param_a=DateTime(2020, 1, 1, 0, tzinfo=Timezone("UTC")))
+        endpoint.assert_called_once_with(param_a=pendulum.datetime(2020, 1, 1, 0, tz="UTC"))
 
     def test_should_propagate_exceptions(self):
         decorator = format_parameters({"param_a": format_datetime})

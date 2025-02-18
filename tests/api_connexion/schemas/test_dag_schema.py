@@ -16,9 +16,11 @@
 # under the License.
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from airflow import DAG
+import pendulum
+import pytest
+
 from airflow.api_connexion.schemas.dag_schema import (
     DAGCollection,
     DAGCollectionSchema,
@@ -26,51 +28,50 @@ from airflow.api_connexion.schemas.dag_schema import (
     DAGSchema,
 )
 from airflow.models import DagModel, DagTag
+from airflow.models.dag import DAG
+from airflow.sdk.definitions.asset import Asset
+
+UTC_JSON_REPR = "UTC" if pendulum.__version__.startswith("3") else "Timezone('UTC')"
 
 
 def test_serialize_test_dag_schema(url_safe_serializer):
     dag_model = DagModel(
         dag_id="test_dag_id",
-        root_dag_id="test_root_dag_id",
         is_paused=True,
         is_active=True,
-        is_subdag=False,
         fileloc="/root/airflow/dags/my_dag.py",
         owners="airflow1,airflow2",
         description="The description",
-        schedule_interval="5 4 * * *",
+        timetable_summary="5 4 * * *",
         tags=[DagTag(name="tag-1"), DagTag(name="tag-2")],
     )
     serialized_dag = DAGSchema().dump(dag_model)
 
-    assert {
+    assert serialized_dag == {
         "dag_id": "test_dag_id",
+        "dag_display_name": "test_dag_id",
         "description": "The description",
         "fileloc": "/root/airflow/dags/my_dag.py",
         "file_token": url_safe_serializer.dumps("/root/airflow/dags/my_dag.py"),
         "is_paused": True,
         "is_active": True,
-        "is_subdag": False,
         "owners": ["airflow1", "airflow2"],
-        "root_dag_id": "test_root_dag_id",
-        "schedule_interval": {"__type": "CronExpression", "value": "5 4 * * *"},
+        "timetable_summary": "5 4 * * *",
         "tags": [{"name": "tag-1"}, {"name": "tag-2"}],
         "next_dagrun": None,
         "has_task_concurrency_limits": True,
         "next_dagrun_data_interval_start": None,
         "next_dagrun_data_interval_end": None,
         "max_active_runs": 16,
+        "max_consecutive_failed_dag_runs": 0,
         "next_dagrun_create_after": None,
         "last_expired": None,
         "max_active_tasks": 16,
-        "last_pickled": None,
         "default_view": None,
         "last_parsed_time": None,
-        "scheduler_lock": None,
         "timetable_description": None,
         "has_import_errors": None,
-        "pickle_id": None,
-    } == serialized_dag
+    }
 
 
 def test_serialize_test_dag_collection_schema(url_safe_serializer):
@@ -78,19 +79,18 @@ def test_serialize_test_dag_collection_schema(url_safe_serializer):
     dag_model_b = DagModel(dag_id="test_dag_id_b", fileloc="/tmp/a.py")
     schema = DAGCollectionSchema()
     instance = DAGCollection(dags=[dag_model_a, dag_model_b], total_entries=2)
-    assert {
+    assert schema.dump(instance) == {
         "dags": [
             {
                 "dag_id": "test_dag_id_a",
+                "dag_display_name": "test_dag_id_a",
                 "description": None,
                 "fileloc": "/tmp/a.py",
                 "file_token": url_safe_serializer.dumps("/tmp/a.py"),
                 "is_paused": None,
-                "is_subdag": None,
                 "is_active": None,
                 "owners": [],
-                "root_dag_id": None,
-                "schedule_interval": None,
+                "timetable_summary": None,
                 "tags": [],
                 "next_dagrun": None,
                 "has_task_concurrency_limits": True,
@@ -100,25 +100,22 @@ def test_serialize_test_dag_collection_schema(url_safe_serializer):
                 "next_dagrun_create_after": None,
                 "last_expired": None,
                 "max_active_tasks": 16,
-                "last_pickled": None,
+                "max_consecutive_failed_dag_runs": 0,
                 "default_view": None,
                 "last_parsed_time": None,
-                "scheduler_lock": None,
                 "timetable_description": None,
                 "has_import_errors": None,
-                "pickle_id": None,
             },
             {
                 "dag_id": "test_dag_id_b",
+                "dag_display_name": "test_dag_id_b",
                 "description": None,
                 "fileloc": "/tmp/a.py",
                 "file_token": url_safe_serializer.dumps("/tmp/a.py"),
                 "is_active": None,
                 "is_paused": None,
-                "is_subdag": None,
                 "owners": [],
-                "root_dag_id": None,
-                "schedule_interval": None,
+                "timetable_summary": None,
                 "tags": [],
                 "next_dagrun": None,
                 "has_task_concurrency_limits": True,
@@ -128,22 +125,22 @@ def test_serialize_test_dag_collection_schema(url_safe_serializer):
                 "next_dagrun_create_after": None,
                 "last_expired": None,
                 "max_active_tasks": 16,
-                "last_pickled": None,
+                "max_consecutive_failed_dag_runs": 0,
                 "default_view": None,
                 "last_parsed_time": None,
-                "scheduler_lock": None,
                 "timetable_description": None,
                 "has_import_errors": None,
-                "pickle_id": None,
             },
         ],
         "total_entries": 2,
-    } == schema.dump(instance)
+    }
 
 
+@pytest.mark.db_test
 def test_serialize_test_dag_detail_schema(url_safe_serializer):
     dag = DAG(
         dag_id="test_dag",
+        schedule=timedelta(days=1),
         start_date=datetime(2020, 6, 19),
         doc_md="docs",
         orientation="LR",
@@ -155,9 +152,9 @@ def test_serialize_test_dag_detail_schema(url_safe_serializer):
 
     expected = {
         "catchup": True,
-        "concurrency": 16,
         "max_active_tasks": 16,
         "dag_id": "test_dag",
+        "dag_display_name": "test_dag",
         "dag_run_timeout": None,
         "default_view": "duration",
         "description": None,
@@ -166,27 +163,96 @@ def test_serialize_test_dag_detail_schema(url_safe_serializer):
         "file_token": url_safe_serializer.dumps(__file__),
         "is_active": None,
         "is_paused": None,
-        "is_subdag": False,
         "orientation": "LR",
         "owners": [],
         "params": {
             "foo": {
-                "__class": "airflow.models.param.Param",
+                "__class": "airflow.sdk.definitions.param.Param",
                 "value": 1,
                 "description": None,
                 "schema": {},
             }
         },
-        "schedule_interval": {"__type": "TimeDelta", "days": 1, "seconds": 0, "microseconds": 0},
         "start_date": "2020-06-19T00:00:00+00:00",
-        "tags": [{"name": "example1"}, {"name": "example2"}],
-        "timezone": "Timezone('UTC')",
+        "tags": sorted(
+            [{"name": "example1"}, {"name": "example2"}],
+            key=lambda val: val["name"],
+        ),
+        "template_searchpath": None,
+        "timetable_summary": "1 day, 0:00:00",
+        "timezone": UTC_JSON_REPR,
         "max_active_runs": 16,
-        "pickle_id": None,
+        "max_consecutive_failed_dag_runs": 0,
         "end_date": None,
         "is_paused_upon_creation": None,
         "render_template_as_native_obj": False,
     }
     obj = schema.dump(dag)
     expected.update({"last_parsed": obj["last_parsed"]})
+    obj["tags"] = sorted(
+        obj["tags"],
+        key=lambda val: val["name"],
+    )
+    assert obj == expected
+
+
+@pytest.mark.db_test
+def test_serialize_test_dag_with_asset_schedule_detail_schema(url_safe_serializer):
+    asset1 = Asset(uri="s3://bucket/obj1", name="asset1")
+    asset2 = Asset(uri="s3://bucket/obj2", name="asset2")
+    dag = DAG(
+        dag_id="test_dag",
+        start_date=datetime(2020, 6, 19),
+        doc_md="docs",
+        orientation="LR",
+        default_view="duration",
+        params={"foo": 1},
+        schedule=asset1 & asset2,
+        tags=["example1", "example2"],
+    )
+    schema = DAGDetailSchema()
+
+    expected = {
+        "catchup": True,
+        "max_active_tasks": 16,
+        "dag_id": "test_dag",
+        "dag_display_name": "test_dag",
+        "dag_run_timeout": None,
+        "default_view": "duration",
+        "description": None,
+        "doc_md": "docs",
+        "fileloc": __file__,
+        "file_token": url_safe_serializer.dumps(__file__),
+        "is_active": None,
+        "is_paused": None,
+        "orientation": "LR",
+        "owners": [],
+        "params": {
+            "foo": {
+                "__class": "airflow.sdk.definitions.param.Param",
+                "value": 1,
+                "description": None,
+                "schema": {},
+            }
+        },
+        "start_date": "2020-06-19T00:00:00+00:00",
+        "tags": sorted(
+            [{"name": "example1"}, {"name": "example2"}],
+            key=lambda val: val["name"],
+        ),
+        "template_searchpath": None,
+        "timetable_summary": "Asset",
+        "timezone": UTC_JSON_REPR,
+        "max_active_runs": 16,
+        "max_consecutive_failed_dag_runs": 0,
+        "end_date": None,
+        "is_paused_upon_creation": None,
+        "render_template_as_native_obj": False,
+    }
+    obj = schema.dump(dag)
+    expected.update({"last_parsed": obj["last_parsed"]})
+    obj["tags"] = sorted(
+        obj["tags"],
+        key=lambda val: val["name"],
+    )
     assert obj == expected

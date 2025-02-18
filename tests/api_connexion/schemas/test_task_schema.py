@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from airflow.api_connexion.schemas.task_schema import TaskCollection, task_collection_schema, task_schema
-from airflow.operators.empty import EmptyOperator
+from airflow.providers.standard.operators.empty import EmptyOperator
 
 
 class TestTaskSchema:
@@ -32,7 +32,7 @@ class TestTaskSchema:
         result = task_schema.dump(op)
         expected = {
             "class_ref": {
-                "module_path": "airflow.operators.empty",
+                "module_path": "airflow.providers.standard.operators.empty",
                 "class_name": "EmptyOperator",
             },
             "depends_on_past": False,
@@ -52,6 +52,7 @@ class TestTaskSchema:
             "retry_exponential_backoff": False,
             "start_date": "2020-06-16T00:00:00+00:00",
             "task_id": "task_id",
+            "task_display_name": "task_id",
             "template_fields": [],
             "trigger_rule": "all_success",
             "ui_color": "#e8f7e4",
@@ -59,6 +60,7 @@ class TestTaskSchema:
             "wait_for_downstream": False,
             "weight_rule": "downstream",
             "is_mapped": False,
+            "doc_md": None,
         }
         assert expected == result
 
@@ -73,7 +75,7 @@ class TestTaskCollectionSchema:
                 {
                     "class_ref": {
                         "class_name": "EmptyOperator",
-                        "module_path": "airflow.operators.empty",
+                        "module_path": "airflow.providers.standard.operators.empty",
                     },
                     "depends_on_past": False,
                     "downstream_task_ids": [],
@@ -84,7 +86,7 @@ class TestTaskCollectionSchema:
                     "owner": "airflow",
                     "params": {
                         "foo": {
-                            "__class": "airflow.models.param.Param",
+                            "__class": "airflow.sdk.definitions.param.Param",
                             "value": "bar",
                             "description": None,
                             "schema": {},
@@ -99,6 +101,7 @@ class TestTaskCollectionSchema:
                     "retry_exponential_backoff": False,
                     "start_date": None,
                     "task_id": "task_id1",
+                    "task_display_name": "task_id1",
                     "template_fields": [],
                     "trigger_rule": "all_success",
                     "ui_color": "#e8f7e4",
@@ -106,6 +109,7 @@ class TestTaskCollectionSchema:
                     "wait_for_downstream": False,
                     "weight_rule": "downstream",
                     "is_mapped": False,
+                    "doc_md": None,
                 }
             ],
             "total_entries": 1,

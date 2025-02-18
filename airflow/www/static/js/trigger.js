@@ -59,11 +59,10 @@ function updateJSONconf() {
           }
         }
         params[keyName] = values.length === 0 ? null : values;
-      } else if (elements[i].value.length === 0) {
-        params[keyName] = null;
       } else if (
         elements[i].attributes.valuetype &&
-        elements[i].attributes.valuetype.value === "object"
+        (elements[i].attributes.valuetype.value === "object" ||
+          elements[i].attributes.valuetype.value === "advancedarray")
       ) {
         try {
           const textValue = objectFields.get(elements[i].name).getValue();
@@ -80,6 +79,8 @@ function updateJSONconf() {
           // ignore JSON parsing errors
           // we don't want to bother users during entry, error will be displayed before submit
         }
+      } else if (elements[i].value.length === 0) {
+        params[keyName] = null;
       } else if (Number.isNaN(elements[i].value)) {
         params[keyName] = elements[i].value;
       } else if (
@@ -93,6 +94,33 @@ function updateJSONconf() {
     }
   }
   jsonForm.setValue(JSON.stringify(params, null, 4));
+}
+
+/**
+ * If the user hits ENTER key inside an input, ensure JSON data is updated.
+ */
+function handleEnter() {
+  updateJSONconf();
+  // somehow following is needed to enforce form is submitted correctly from CodeMirror
+  document.getElementById("json").value = jsonForm.getValue();
+}
+
+/**
+ * Track user changes in input fields, ensure JSON is updated when user presses enter
+ * See https://github.com/apache/airflow/issues/42157
+ */
+function enterInputField() {
+  const form = document.getElementById("trigger_form");
+  form.addEventListener("submit", handleEnter);
+}
+
+/**
+ * Stop tracking user changes in input fields
+ */
+function leaveInputField() {
+  const form = document.getElementById("trigger_form");
+  form.removeEventListener("submit", handleEnter);
+  updateJSONconf();
 }
 
 /**
@@ -112,6 +140,7 @@ function initForm() {
     mode: { name: "javascript", json: true },
     gutters: ["CodeMirror-lint-markers"],
     lint: true,
+    indentUnit: 4,
   });
   jsonForm.setSize(null, height);
 
@@ -122,7 +151,8 @@ function initForm() {
       if (elements[i].name && elements[i].name.startsWith("element_")) {
         if (
           elements[i].attributes.valuetype &&
-          elements[i].attributes.valuetype.value === "object"
+          (elements[i].attributes.valuetype.value === "object" ||
+            elements[i].attributes.valuetype.value === "advancedarray")
         ) {
           // Apply JSON formatting and linting to all object fields in the form
           const field = CodeMirror.fromTextArea(elements[i], {
@@ -130,6 +160,7 @@ function initForm() {
             mode: { name: "javascript", json: true },
             gutters: ["CodeMirror-lint-markers"],
             lint: true,
+            indentUnit: 4,
           });
           field.on("blur", updateJSONconf);
           objectFields.set(elements[i].name, field);
@@ -144,7 +175,8 @@ function initForm() {
         } else if (elements[i].type === "checkbox") {
           elements[i].addEventListener("change", updateJSONconf);
         } else {
-          elements[i].addEventListener("blur", updateJSONconf);
+          elements[i].addEventListener("focus", enterInputField);
+          elements[i].addEventListener("blur", leaveInputField);
         }
       }
     }
@@ -230,7 +262,8 @@ function setRecentConfig(e) {
         element.value = newValue.join("\n");
       } else if (
         element.attributes.valuetype &&
-        element.attributes.valuetype.value === "object"
+        (element.attributes.valuetype.value === "object" ||
+          element.attributes.valuetype.value === "advancedarray")
       ) {
         objectFields
           .get(`element_${keys[i]}`)

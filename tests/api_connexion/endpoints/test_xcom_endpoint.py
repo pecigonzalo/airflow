@@ -25,15 +25,17 @@ from airflow.models.dag import DagModel
 from airflow.models.dagrun import DagRun
 from airflow.models.taskinstance import TaskInstance
 from airflow.models.xcom import BaseXCom, XCom, resolve_xcom_backend
-from airflow.operators.empty import EmptyOperator
-from airflow.security import permissions
-from airflow.utils.dates import parse_execution_date
+from airflow.providers.standard.operators.empty import EmptyOperator
+from airflow.utils import timezone
 from airflow.utils.session import create_session
 from airflow.utils.timezone import utcnow
 from airflow.utils.types import DagRunType
-from tests.test_utils.api_connexion_utils import assert_401, create_user, delete_user
-from tests.test_utils.config import conf_vars
-from tests.test_utils.db import clear_db_dags, clear_db_runs, clear_db_xcom
+
+from tests_common.test_utils.api_connexion_utils import assert_401, create_user, delete_user
+from tests_common.test_utils.config import conf_vars
+from tests_common.test_utils.db import clear_db_dags, clear_db_runs, clear_db_xcom
+
+pytestmark = pytest.mark.db_test
 
 
 class CustomXCom(BaseXCom):
@@ -50,36 +52,33 @@ def configured_app(minimal_app_for_api):
     app = minimal_app_for_api
 
     create_user(
-        app,  # type: ignore
+        app,
         username="test",
-        role_name="Test",
-        permissions=[
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG),
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG_RUN),
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_TASK_INSTANCE),
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_XCOM),
-        ],
+        role_name="admin",
     )
-    create_user(
-        app,  # type: ignore
-        username="test_granular_permissions",
-        role_name="TestGranularDag",
-        permissions=[
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG_RUN),
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_TASK_INSTANCE),
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_XCOM),
-        ],
-    )
-    app.appbuilder.sm.sync_perm_for_dag(  # type: ignore
-        "test-dag-id-1",
-        access_control={"TestGranularDag": [permissions.ACTION_CAN_EDIT, permissions.ACTION_CAN_READ]},
-    )
-    create_user(app, username="test_no_permissions", role_name="TestNoPermissions")  # type: ignore
+    create_user(app, username="test_no_permissions", role_name=None)
 
     yield app
 
-    delete_user(app, username="test")  # type: ignore
-    delete_user(app, username="test_no_permissions")  # type: ignore
+    delete_user(app, username="test")
+    delete_user(app, username="test_no_permissions")
+
+
+def _compare_xcom_collections(collection1: dict, collection_2: dict):
+    assert collection1.get("total_entries") == collection_2.get("total_entries")
+
+    def sort_key(record):
+        return (
+            record.get("dag_id"),
+            record.get("task_id"),
+            record.get("logical_date"),
+            record.get("map_index"),
+            record.get("key"),
+        )
+
+    assert sorted(collection1.get("xcom_entries", []), key=sort_key) == sorted(
+        collection_2.get("xcom_entries", []), key=sort_key
+    )
 
 
 class TestXComEndpoint:
@@ -107,39 +106,97 @@ class TestXComEndpoint:
 
 
 class TestGetXComEntry(TestXComEndpoint):
-    def test_should_respond_200(self):
+    def test_should_respond_200_stringify(self):
         dag_id = "test-dag-id"
         task_id = "test-task-id"
-        execution_date = "2005-04-02T00:00:00+00:00"
+        logical_date = "2005-04-02T00:00:00+00:00"
+        run_after = "2005-04-02T00:00:00+00:00"
         xcom_key = "test-xcom-key"
-        execution_date_parsed = parse_execution_date(execution_date)
-        run_id = DagRun.generate_run_id(DagRunType.MANUAL, execution_date_parsed)
-        self._create_xcom_entry(dag_id, run_id, execution_date_parsed, task_id, xcom_key)
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after_parsed = timezone.parse(run_after)
+        run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
+        self._create_xcom_entry(dag_id, run_id, logical_date_parsed, task_id, xcom_key, {"key": "value"})
         response = self.client.get(
             f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}",
             environ_overrides={"REMOTE_USER": "test"},
         )
-        assert 200 == response.status_code
+        assert response.status_code == 200
 
         current_data = response.json
         current_data["timestamp"] = "TIMESTAMP"
         assert current_data == {
             "dag_id": dag_id,
-            "execution_date": execution_date,
+            "logical_date": logical_date,
             "key": xcom_key,
             "task_id": task_id,
+            "map_index": -1,
             "timestamp": "TIMESTAMP",
-            "value": "TEST_VALUE",
+            "value": "{'key': 'value'}",
         }
+
+    def test_should_respond_200_native(self):
+        dag_id = "test-dag-id"
+        task_id = "test-task-id"
+        logical_date = "2005-04-02T00:00:00+00:00"
+        run_after = "2005-04-02T00:00:00+00:00"
+        xcom_key = "test-xcom-key"
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after_parsed = timezone.parse(run_after)
+        run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
+        self._create_xcom_entry(dag_id, run_id, logical_date_parsed, task_id, xcom_key, {"key": "value"})
+        response = self.client.get(
+            f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}?stringify=false",
+            environ_overrides={"REMOTE_USER": "test"},
+        )
+        assert response.status_code == 200
+
+        current_data = response.json
+        current_data["timestamp"] = "TIMESTAMP"
+        assert current_data == {
+            "dag_id": dag_id,
+            "logical_date": logical_date,
+            "key": xcom_key,
+            "task_id": task_id,
+            "map_index": -1,
+            "timestamp": "TIMESTAMP",
+            "value": {"key": "value"},
+        }
+
+    def test_should_raise_404_for_non_existent_xcom(self):
+        dag_id = "test-dag-id"
+        task_id = "test-task-id"
+        logical_date = "2005-04-02T00:00:00+00:00"
+        run_after = "2005-04-02T00:00:00+00:00"
+        xcom_key = "test-xcom-key"
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after_parsed = timezone.parse(run_after)
+        run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
+        self._create_xcom_entry(dag_id, run_id, logical_date_parsed, task_id, xcom_key)
+        response = self.client.get(
+            f"/api/v1/dags/nonexistentdagid/dagRuns/{run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}",
+            environ_overrides={"REMOTE_USER": "test"},
+        )
+        assert response.status_code == 404
+        assert response.json["title"] == "XCom entry not found"
 
     def test_should_raises_401_unauthenticated(self):
         dag_id = "test-dag-id"
         task_id = "test-task-id"
-        execution_date = "2005-04-02T00:00:00+00:00"
+        logical_date = "2005-04-02T00:00:00+00:00"
+        run_after = "2005-04-02T00:00:00+00:00"
         xcom_key = "test-xcom-key"
-        execution_date_parsed = parse_execution_date(execution_date)
-        run_id = DagRun.generate_run_id(DagRunType.MANUAL, execution_date_parsed)
-        self._create_xcom_entry(dag_id, run_id, execution_date_parsed, task_id, xcom_key)
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after_parsed = timezone.parse(run_after)
+        run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
+        self._create_xcom_entry(dag_id, run_id, logical_date_parsed, task_id, xcom_key)
         response = self.client.get(
             f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}"
         )
@@ -149,25 +206,31 @@ class TestGetXComEntry(TestXComEndpoint):
     def test_should_raise_403_forbidden(self):
         dag_id = "test-dag-id"
         task_id = "test-task-id"
-        execution_date = "2005-04-02T00:00:00+00:00"
+        logical_date = "2005-04-02T00:00:00+00:00"
+        run_after = "2005-04-02T00:00:00+00:00"
         xcom_key = "test-xcom-key"
-        execution_date_parsed = parse_execution_date(execution_date)
-        run_id = DagRun.generate_run_id(DagRunType.MANUAL, execution_date_parsed)
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after_parsed = timezone.parse(run_after)
+        run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
 
-        self._create_xcom_entry(dag_id, run_id, execution_date_parsed, task_id, xcom_key)
+        self._create_xcom_entry(dag_id, run_id, logical_date_parsed, task_id, xcom_key)
         response = self.client.get(
             f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}",
             environ_overrides={"REMOTE_USER": "test_no_permissions"},
         )
         assert response.status_code == 403
 
-    def _create_xcom_entry(self, dag_id, run_id, execution_date, task_id, xcom_key, *, backend=XCom):
+    def _create_xcom_entry(
+        self, dag_id, run_id, logical_date, task_id, xcom_key, xcom_value="TEST_VALUE", *, backend=XCom
+    ):
         with create_session() as session:
             dagrun = DagRun(
                 dag_id=dag_id,
                 run_id=run_id,
-                execution_date=execution_date,
-                start_date=execution_date,
+                logical_date=logical_date,
+                start_date=logical_date,
                 run_type=DagRunType.MANUAL,
             )
             session.add(dagrun)
@@ -176,176 +239,306 @@ class TestGetXComEntry(TestXComEndpoint):
             session.add(ti)
         backend.set(
             key=xcom_key,
-            value="TEST_VALUE",
+            value=xcom_value,
             run_id=run_id,
             task_id=task_id,
             dag_id=dag_id,
         )
 
     @pytest.mark.parametrize(
-        "query, expected_value",
+        "allowed, query, expected_status_or_value, key",
         [
-            pytest.param("?deserialize=true", "real deserialized TEST_VALUE", id="true"),
-            pytest.param("?deserialize=false", "orm deserialized TEST_VALUE", id="false"),
-            pytest.param("", "orm deserialized TEST_VALUE", id="default"),
+            pytest.param(
+                True,
+                "?deserialize=true",
+                "real deserialized TEST_VALUE",
+                "key",
+                id="true",
+            ),
+            pytest.param(
+                False,
+                "?deserialize=true",
+                400,
+                "key",
+                id="disallowed",
+            ),
+            pytest.param(
+                True,
+                "?deserialize=false",
+                "orm deserialized TEST_VALUE",
+                "key",
+                id="false-irrelevant",
+            ),
+            pytest.param(
+                False,
+                "?deserialize=false",
+                "orm deserialized TEST_VALUE",
+                "key",
+                id="false",
+            ),
+            pytest.param(
+                True,
+                "",
+                "orm deserialized TEST_VALUE",
+                "key",
+                id="default-irrelevant",
+            ),
+            pytest.param(
+                False,
+                "",
+                "orm deserialized TEST_VALUE",
+                "key",
+                id="default",
+            ),
+            pytest.param(
+                False,
+                "",
+                "orm deserialized TEST_VALUE",
+                "key/with/slashes",
+                id="key-with-slashes",
+            ),
         ],
     )
     @conf_vars({("core", "xcom_backend"): "tests.api_connexion.endpoints.test_xcom_endpoint.CustomXCom"})
-    def test_custom_xcom_deserialize(self, query, expected_value):
+    def test_custom_xcom_deserialize(
+        self, allowed: bool, query: str, expected_status_or_value: int | str, key: str
+    ):
         XCom = resolve_xcom_backend()
-        self._create_xcom_entry("dag", "run", utcnow(), "task", "key", backend=XCom)
+        self._create_xcom_entry("dag", "run", utcnow(), "task", key, backend=XCom)
 
-        url = f"/api/v1/dags/dag/dagRuns/run/taskInstances/task/xcomEntries/key{query}"
+        url = f"/api/v1/dags/dag/dagRuns/run/taskInstances/task/xcomEntries/{key}{query}"
         with mock.patch("airflow.api_connexion.endpoints.xcom_endpoint.XCom", XCom):
-            response = self.client.get(url, environ_overrides={"REMOTE_USER": "test"})
+            with conf_vars({("api", "enable_xcom_deserialize_support"): str(allowed)}):
+                response = self.client.get(url, environ_overrides={"REMOTE_USER": "test"})
 
-        assert response.status_code == 200
-        assert response.json["value"] == expected_value
+        if isinstance(expected_status_or_value, int):
+            assert response.status_code == expected_status_or_value
+        else:
+            assert response.status_code == 200
+            assert response.json["value"] == expected_status_or_value
 
 
 class TestGetXComEntries(TestXComEndpoint):
     def test_should_respond_200(self):
         dag_id = "test-dag-id"
         task_id = "test-task-id"
-        execution_date = "2005-04-02T00:00:00+00:00"
-        execution_date_parsed = parse_execution_date(execution_date)
-        run_id = DagRun.generate_run_id(DagRunType.MANUAL, execution_date_parsed)
+        logical_date = "2005-04-02T00:00:00+00:00"
+        run_after = "2005-04-02T00:00:00+00:00"
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after_parsed = timezone.parse(run_after)
+        run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
 
-        self._create_xcom_entries(dag_id, run_id, execution_date_parsed, task_id)
+        self._create_xcom_entries(dag_id, run_id, logical_date_parsed, task_id)
         response = self.client.get(
             f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}/xcomEntries",
             environ_overrides={"REMOTE_USER": "test"},
         )
 
-        assert 200 == response.status_code
+        assert response.status_code == 200
         response_data = response.json
         for xcom_entry in response_data["xcom_entries"]:
             xcom_entry["timestamp"] = "TIMESTAMP"
-        assert response_data == {
-            "xcom_entries": [
-                {
-                    "dag_id": dag_id,
-                    "execution_date": execution_date,
-                    "key": "test-xcom-key-1",
-                    "task_id": task_id,
-                    "timestamp": "TIMESTAMP",
-                },
-                {
-                    "dag_id": dag_id,
-                    "execution_date": execution_date,
-                    "key": "test-xcom-key-2",
-                    "task_id": task_id,
-                    "timestamp": "TIMESTAMP",
-                },
-            ],
-            "total_entries": 2,
-        }
+        _compare_xcom_collections(
+            response_data,
+            {
+                "xcom_entries": [
+                    {
+                        "dag_id": dag_id,
+                        "logical_date": logical_date,
+                        "key": "test-xcom-key-1",
+                        "task_id": task_id,
+                        "timestamp": "TIMESTAMP",
+                        "map_index": -1,
+                    },
+                    {
+                        "dag_id": dag_id,
+                        "logical_date": logical_date,
+                        "key": "test-xcom-key-2",
+                        "task_id": task_id,
+                        "timestamp": "TIMESTAMP",
+                        "map_index": -1,
+                    },
+                ],
+                "total_entries": 2,
+            },
+        )
 
     def test_should_respond_200_with_tilde_and_access_to_all_dags(self):
         dag_id_1 = "test-dag-id-1"
         task_id_1 = "test-task-id-1"
-        execution_date = "2005-04-02T00:00:00+00:00"
-        execution_date_parsed = parse_execution_date(execution_date)
-        run_id_1 = DagRun.generate_run_id(DagRunType.MANUAL, execution_date_parsed)
-        self._create_xcom_entries(dag_id_1, run_id_1, execution_date_parsed, task_id_1)
+        logical_date = "2005-04-02T00:00:00+00:00"
+        run_after = "2005-04-02T00:00:00+00:00"
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after_parsed = timezone.parse(run_after)
+        run_id_1 = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
+        self._create_xcom_entries(dag_id_1, run_id_1, logical_date_parsed, task_id_1)
 
         dag_id_2 = "test-dag-id-2"
         task_id_2 = "test-task-id-2"
-        run_id_2 = DagRun.generate_run_id(DagRunType.MANUAL, execution_date_parsed)
-        self._create_xcom_entries(dag_id_2, run_id_2, execution_date_parsed, task_id_2)
+        run_id_2 = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
+        self._create_xcom_entries(dag_id_2, run_id_2, logical_date_parsed, task_id_2)
 
         response = self.client.get(
             "/api/v1/dags/~/dagRuns/~/taskInstances/~/xcomEntries",
             environ_overrides={"REMOTE_USER": "test"},
         )
 
-        assert 200 == response.status_code
+        assert response.status_code == 200
         response_data = response.json
         for xcom_entry in response_data["xcom_entries"]:
             xcom_entry["timestamp"] = "TIMESTAMP"
-        assert response_data == {
-            "xcom_entries": [
-                {
-                    "dag_id": dag_id_1,
-                    "execution_date": execution_date,
-                    "key": "test-xcom-key-1",
-                    "task_id": task_id_1,
-                    "timestamp": "TIMESTAMP",
-                },
-                {
-                    "dag_id": dag_id_1,
-                    "execution_date": execution_date,
-                    "key": "test-xcom-key-2",
-                    "task_id": task_id_1,
-                    "timestamp": "TIMESTAMP",
-                },
-                {
-                    "dag_id": dag_id_2,
-                    "execution_date": execution_date,
-                    "key": "test-xcom-key-1",
-                    "task_id": task_id_2,
-                    "timestamp": "TIMESTAMP",
-                },
-                {
-                    "dag_id": dag_id_2,
-                    "execution_date": execution_date,
-                    "key": "test-xcom-key-2",
-                    "task_id": task_id_2,
-                    "timestamp": "TIMESTAMP",
-                },
-            ],
-            "total_entries": 4,
-        }
-
-    def test_should_respond_200_with_tilde_and_granular_dag_access(self):
-        dag_id_1 = "test-dag-id-1"
-        task_id_1 = "test-task-id-1"
-        execution_date = "2005-04-02T00:00:00+00:00"
-        execution_date_parsed = parse_execution_date(execution_date)
-        dag_run_id_1 = DagRun.generate_run_id(DagRunType.MANUAL, execution_date_parsed)
-        self._create_xcom_entries(dag_id_1, dag_run_id_1, execution_date_parsed, task_id_1)
-
-        dag_id_2 = "test-dag-id-2"
-        task_id_2 = "test-task-id-2"
-        run_id_2 = DagRun.generate_run_id(DagRunType.MANUAL, execution_date_parsed)
-        self._create_xcom_entries(dag_id_2, run_id_2, execution_date_parsed, task_id_2)
-        self._create_invalid_xcom_entries(execution_date_parsed)
-        response = self.client.get(
-            "/api/v1/dags/~/dagRuns/~/taskInstances/~/xcomEntries",
-            environ_overrides={"REMOTE_USER": "test_granular_permissions"},
+        _compare_xcom_collections(
+            response_data,
+            {
+                "xcom_entries": [
+                    {
+                        "dag_id": dag_id_1,
+                        "logical_date": logical_date,
+                        "key": "test-xcom-key-1",
+                        "task_id": task_id_1,
+                        "timestamp": "TIMESTAMP",
+                        "map_index": -1,
+                    },
+                    {
+                        "dag_id": dag_id_1,
+                        "logical_date": logical_date,
+                        "key": "test-xcom-key-2",
+                        "task_id": task_id_1,
+                        "timestamp": "TIMESTAMP",
+                        "map_index": -1,
+                    },
+                    {
+                        "dag_id": dag_id_2,
+                        "logical_date": logical_date,
+                        "key": "test-xcom-key-1",
+                        "task_id": task_id_2,
+                        "timestamp": "TIMESTAMP",
+                        "map_index": -1,
+                    },
+                    {
+                        "dag_id": dag_id_2,
+                        "logical_date": logical_date,
+                        "key": "test-xcom-key-2",
+                        "task_id": task_id_2,
+                        "timestamp": "TIMESTAMP",
+                        "map_index": -1,
+                    },
+                ],
+                "total_entries": 4,
+            },
         )
 
-        assert 200 == response.status_code
-        response_data = response.json
-        for xcom_entry in response_data["xcom_entries"]:
-            xcom_entry["timestamp"] = "TIMESTAMP"
-        assert response_data == {
-            "xcom_entries": [
-                {
-                    "dag_id": dag_id_1,
-                    "execution_date": execution_date,
-                    "key": "test-xcom-key-1",
-                    "task_id": task_id_1,
-                    "timestamp": "TIMESTAMP",
-                },
-                {
-                    "dag_id": dag_id_1,
-                    "execution_date": execution_date,
-                    "key": "test-xcom-key-2",
-                    "task_id": task_id_1,
-                    "timestamp": "TIMESTAMP",
-                },
-            ],
-            "total_entries": 2,
+    def test_should_respond_200_with_map_index(self):
+        dag_id = "test-dag-id"
+        task_id = "test-task-id"
+        logical_date = "2005-04-02T00:00:00+00:00"
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after = "2005-04-02T00:00:00+00:00"
+        run_after_parsed = timezone.parse(run_after)
+        dag_run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
+        self._create_xcom_entries(dag_id, dag_run_id, logical_date_parsed, task_id, mapped_ti=True)
+
+        def assert_expected_result(expected_entries, map_index=None):
+            response = self.client.get(
+                "/api/v1/dags/~/dagRuns/~/taskInstances/~/xcomEntries"
+                f"{('?map_index=' + str(map_index)) if map_index is not None else ''}",
+                environ_overrides={"REMOTE_USER": "test"},
+            )
+
+            assert response.status_code == 200
+            response_data = response.json
+            for xcom_entry in response_data["xcom_entries"]:
+                xcom_entry["timestamp"] = "TIMESTAMP"
+            assert response_data == {
+                "xcom_entries": expected_entries,
+                "total_entries": len(expected_entries),
+            }
+
+        expected_entry1 = {
+            "dag_id": dag_id,
+            "logical_date": logical_date,
+            "key": "test-xcom-key",
+            "task_id": task_id,
+            "timestamp": "TIMESTAMP",
+            "map_index": 0,
         }
+        expected_entry2 = {
+            "dag_id": dag_id,
+            "logical_date": logical_date,
+            "key": "test-xcom-key",
+            "task_id": task_id,
+            "timestamp": "TIMESTAMP",
+            "map_index": 1,
+        }
+        assert_expected_result([expected_entry1], map_index=0)
+        assert_expected_result([expected_entry2], map_index=1)
+        assert_expected_result([expected_entry1, expected_entry2], map_index=None)
+
+    def test_should_respond_200_with_xcom_key(self):
+        dag_id = "test-dag-id"
+        task_id = "test-task-id"
+        logical_date = "2005-04-02T00:00:00+00:00"
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after = "2005-04-02T00:00:00+00:00"
+        run_after_parsed = timezone.parse(run_after)
+        dag_run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
+        self._create_xcom_entries(dag_id, dag_run_id, logical_date_parsed, task_id, mapped_ti=True)
+
+        def assert_expected_result(expected_entries, key=None):
+            response = self.client.get(
+                f"/api/v1/dags/~/dagRuns/~/taskInstances/~/xcomEntries?xcom_key={key}",
+                environ_overrides={"REMOTE_USER": "test"},
+            )
+
+            assert response.status_code == 200
+            response_data = response.json
+            for xcom_entry in response_data["xcom_entries"]:
+                xcom_entry["timestamp"] = "TIMESTAMP"
+            assert response_data == {
+                "xcom_entries": expected_entries,
+                "total_entries": len(expected_entries),
+            }
+
+        expected_entry1 = {
+            "dag_id": dag_id,
+            "logical_date": logical_date,
+            "key": "test-xcom-key",
+            "task_id": task_id,
+            "timestamp": "TIMESTAMP",
+            "map_index": 0,
+        }
+        expected_entry2 = {
+            "dag_id": dag_id,
+            "logical_date": logical_date,
+            "key": "test-xcom-key",
+            "task_id": task_id,
+            "timestamp": "TIMESTAMP",
+            "map_index": 1,
+        }
+        assert_expected_result([expected_entry1, expected_entry2], key="test-xcom-key")
+        assert_expected_result([], key="test-xcom-key-1")
 
     def test_should_raises_401_unauthenticated(self):
         dag_id = "test-dag-id"
         task_id = "test-task-id"
-        execution_date = "2005-04-02T00:00:00+00:00"
-        execution_date_parsed = parse_execution_date(execution_date)
-        run_id = DagRun.generate_run_id(DagRunType.MANUAL, execution_date_parsed)
-        self._create_xcom_entries(dag_id, run_id, execution_date_parsed, task_id)
+        logical_date = "2005-04-02T00:00:00+00:00"
+        logical_date_parsed = timezone.parse(logical_date)
+        run_after = "2005-04-02T00:00:00+00:00"
+        run_after_parsed = timezone.parse(run_after)
+        run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=logical_date_parsed, run_after=run_after_parsed
+        )
+        self._create_xcom_entries(dag_id, run_id, logical_date_parsed, task_id)
 
         response = self.client.get(
             f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}/xcomEntries"
@@ -353,32 +546,41 @@ class TestGetXComEntries(TestXComEndpoint):
 
         assert_401(response)
 
-    def _create_xcom_entries(self, dag_id, run_id, execution_date, task_id):
+    def _create_xcom_entries(self, dag_id, run_id, logical_date, task_id, mapped_ti=False):
         with create_session() as session:
             dag = DagModel(dag_id=dag_id)
             session.add(dag)
             dagrun = DagRun(
                 dag_id=dag_id,
                 run_id=run_id,
-                execution_date=execution_date,
-                start_date=execution_date,
+                logical_date=logical_date,
+                start_date=logical_date,
                 run_type=DagRunType.MANUAL,
             )
             session.add(dagrun)
-            ti = TaskInstance(EmptyOperator(task_id=task_id), run_id=run_id)
-            ti.dag_id = dag_id
-            session.add(ti)
+            if mapped_ti:
+                for i in [0, 1]:
+                    ti = TaskInstance(EmptyOperator(task_id=task_id), run_id=run_id, map_index=i)
+                    ti.dag_id = dag_id
+                    session.add(ti)
+            else:
+                ti = TaskInstance(EmptyOperator(task_id=task_id), run_id=run_id)
+                ti.dag_id = dag_id
+                session.add(ti)
 
         for i in [1, 2]:
+            if mapped_ti:
+                key = "test-xcom-key"
+                map_index = i - 1
+            else:
+                key = f"test-xcom-key-{i}"
+                map_index = -1
+
             XCom.set(
-                key=f"test-xcom-key-{i}",
-                value="TEST",
-                run_id=run_id,
-                task_id=task_id,
-                dag_id=dag_id,
+                key=key, value="TEST", run_id=run_id, task_id=task_id, dag_id=dag_id, map_index=map_index
             )
 
-    def _create_invalid_xcom_entries(self, execution_date):
+    def _create_invalid_xcom_entries(self, logical_date):
         """
         Invalid XCom entries to test join query
         """
@@ -388,16 +590,16 @@ class TestGetXComEntries(TestXComEndpoint):
             dagrun = DagRun(
                 dag_id="invalid_dag",
                 run_id="invalid_run_id",
-                execution_date=execution_date + timedelta(days=1),
-                start_date=execution_date,
+                logical_date=logical_date + timedelta(days=1),
+                start_date=logical_date,
                 run_type=DagRunType.MANUAL,
             )
             session.add(dagrun)
             dagrun1 = DagRun(
                 dag_id="invalid_dag",
                 run_id="not_this_run_id",
-                execution_date=execution_date,
-                start_date=execution_date,
+                logical_date=logical_date,
+                start_date=logical_date,
                 run_type=DagRunType.MANUAL,
             )
             session.add(dagrun1)
@@ -418,9 +620,13 @@ class TestPaginationGetXComEntries(TestXComEndpoint):
     def setup_method(self):
         self.dag_id = "test-dag-id"
         self.task_id = "test-task-id"
-        self.execution_date = "2005-04-02T00:00:00+00:00"
-        self.execution_date_parsed = parse_execution_date(self.execution_date)
-        self.run_id = DagRun.generate_run_id(DagRunType.MANUAL, self.execution_date_parsed)
+        self.logical_date = "2005-04-02T00:00:00+00:00"
+        self.logical_date_parsed = timezone.parse(self.logical_date)
+        run_after = "2005-04-02T00:00:00+00:00"
+        run_after_parsed = timezone.parse(run_after)
+        self.run_id = DagRun.generate_run_id(
+            run_type=DagRunType.MANUAL, logical_date=self.logical_date_parsed, run_after=run_after_parsed
+        )
 
     @pytest.mark.parametrize(
         "query_params, expected_xcom_ids",
@@ -481,8 +687,8 @@ class TestPaginationGetXComEntries(TestXComEndpoint):
             dagrun = DagRun(
                 dag_id=self.dag_id,
                 run_id=self.run_id,
-                execution_date=self.execution_date_parsed,
-                start_date=self.execution_date_parsed,
+                logical_date=self.logical_date_parsed,
+                start_date=self.logical_date_parsed,
                 run_type=DagRunType.MANUAL,
             )
             session.add(dagrun)
@@ -495,11 +701,11 @@ class TestPaginationGetXComEntries(TestXComEndpoint):
                 xcom = XCom(
                     dag_run_id=dagrun.id,
                     key=f"TEST_XCOM_KEY{i}",
-                    value=b"null",
+                    value="null",
                     run_id=self.run_id,
                     task_id=self.task_id,
                     dag_id=self.dag_id,
-                    timestamp=self.execution_date_parsed,
+                    timestamp=self.logical_date_parsed,
                 )
                 session.add(xcom)
 

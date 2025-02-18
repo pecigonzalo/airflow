@@ -21,6 +21,2369 @@
 
 .. towncrier release notes start
 
+Airflow 2.10.5 (2025-02-10)
+---------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+Ensure teardown tasks are executed when DAG run is set to failed (#45530)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Previously when a DAG run was manually set to "failed" or to "success" state the terminal state was set to all tasks.
+But this was a gap for cases when setup- and teardown tasks were defined: If teardown was used to clean-up infrastructure
+or other resources, they were also skipped and thus resources could stay allocated.
+
+As of now when setup tasks had been executed before and the DAG is manually set to "failed" or "success" then teardown
+tasks are executed. Teardown tasks are skipped if the setup was also skipped.
+
+As a side effect this means if the DAG contains teardown tasks, then the manual marking of DAG as "failed" or "success"
+will need to keep the DAG in running state to ensure that teardown tasks will be scheduled. They would not be scheduled
+if the DAG is directly set to "failed" or "success".
+
+
+Bug Fixes
+"""""""""
+
+- Prevent using ``trigger_rule=TriggerRule.ALWAYS`` in a task-generated mapping within bare tasks (#44751)
+- Fix ShortCircuitOperator mapped tasks (#44912)
+- Fix premature evaluation of tasks with certain trigger rules (e.g. ``ONE_DONE``) in a mapped task group (#44937)
+- Fix task_id validation in BaseOperator (#44938) (#44938)
+- Allow fetching XCom with forward slash from the API and escape it in the UI (#45134)
+- Fix ``FileTaskHandler`` only read from default executor (#46000)
+- Fix empty task instance for log (#45702) (#45703)
+- Remove ``skip_if`` and ``run_if`` decorators before TaskFlow virtualenv tasks are run (#41832) (#45680)
+- Fix request body for json requests in event log (#45546) (#45560)
+- Ensure teardown tasks are executed when DAG run is set to failed (#45530) (#45581)
+- Do not update DR on TI update after task execution (#45348)
+- Fix object and array DAG params that have a None default (#45313) (#45315)
+- Fix endless sensor rescheduling (#45224) (#45250)
+- Evaluate None in SQLAlchemy's extended JSON type decorator (#45119) (#45120)
+- Allow dynamic tasks to be filtered by ``rendered_map_index`` (#45109) (#45122)
+- Handle relative paths when sanitizing URLs (#41995) (#45080)
+- Set Autocomplete Off on Login Form (#44929) (#44940)
+- Add Webserver parameters ``max_form_parts``, ``max_form_memory_size`` (#46243) (#45749)
+- Fixed accessing thread local variable in BaseOperators ``execute`` safeguard mechanism (#44646) (#46280)
+- Add map_index parameter to extra links API (#46337)
+
+
+Miscellaneous
+"""""""""""""
+
+- Add traceback log output when SIGTERMs was sent (#44880) (#45077)
+- Removed the ability for Operators to specify their own "scheduling deps" (#45713) (#45742)
+- Deprecate ``conf`` from Task Context (#44993)
+
+
+Airflow 2.10.4 (2024-12-16)
+---------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+TaskInstance ``priority_weight`` is capped in 32-bit signed integer ranges (#43611)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Some database engines are limited to 32-bit integer values. As some users reported errors in
+weight rolled-over to negative values, we decided to cap the value to the 32-bit integer. Even
+if internally in python smaller or larger values to 64 bit are supported, ``priority_weight`` is
+capped and only storing values from -2147483648 to 2147483647.
+
+Bug Fixes
+^^^^^^^^^
+
+- Fix stats of dynamic mapped tasks after automatic retries of failed tasks (#44300)
+- Fix wrong display of multi-line messages in the log after filtering (#44457)
+- Allow "/" in metrics validator (#42934) (#44515)
+- Fix gantt flickering (#44488) (#44517)
+- Fix problem with inability to remove fields from Connection form (#40421) (#44442)
+- Check pool_slots on partial task import instead of execution (#39724) (#42693)
+- Avoid grouping task instance stats by try_number for dynamic mapped tasks (#44300) (#44319)
+- Re-queue task when they are stuck in queued (#43520) (#44158)
+- Suppress the warnings where we check for sensitive values (#44148) (#44167)
+- Fix get_task_instance_try_details to return appropriate schema (#43830) (#44133)
+- Log message source details are grouped (#43681) (#44070)
+- Fix duplication of Task tries in the UI (#43891) (#43950)
+- Add correct mime-type in OpenAPI spec (#43879) (#43901)
+- Disable extra links button if link is null or empty (#43844) (#43851)
+- Disable XCom list ordering by execution_date (#43680) (#43696)
+- Fix venv numpy example which needs to be 1.26 at least to be working in Python 3.12 (#43659)
+- Fix Try Selector in Mapped Tasks also on Index 0 (#43590) (#43591)
+- Prevent using ``trigger_rule="always"`` in a dynamic mapped task (#43810)
+- Prevent using ``trigger_rule=TriggerRule.ALWAYS`` in a task-generated mapping within bare tasks (#44751)
+
+Doc Only Changes
+""""""""""""""""
+- Update XCom docs around containers/helm (#44570) (#44573)
+
+Miscellaneous
+"""""""""""""
+- Raise deprecation warning when accessing inlet or outlet events through str (#43922)
+
+
+Airflow 2.10.3 (2024-11-05)
+---------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+No significant changes.
+
+Bug Fixes
+"""""""""
+- Improves the handling of value masking when setting Airflow variables for enhanced security.  (#43123) (#43278)
+- Adds support for task_instance_mutation_hook to handle mapped operators with index 0. (#42661) (#43089)
+- Fixes executor cleanup to properly handle zombie tasks when task instances are terminated. (#43065)
+- Adds retry logic for HTTP 502 and 504 errors in internal API calls to handle webserver startup issues. (#42994) (#43044)
+- Restores the use of separate sessions for writing and deleting RTIF data to prevent StaleDataError. (#42928) (#43012)
+- Fixes PythonOperator error by replacing hyphens with underscores in DAG names. (#42993)
+- Improving validation of task retries to handle None values (#42532) (#42915)
+- Fixes error handling in dataset managers when resolving dataset aliases into new datasets (#42733)
+- Enables clicking on task names in the DAG Graph View to correctly select the corresponding task. (#38782) (#42697)
+- Prevent redirect loop on /home with tags/last run filters (#42607) (#42609) (#42628)
+- Support of host.name in OTEL metrics and usage of OTEL_RESOURCE_ATTRIBUTES in metrics (#42428) (#42604)
+- Reduce eyestrain in dark mode with reduced contrast and saturation (#42567) (#42583)
+- Handle ENTER key correctly in trigger form and allow manual JSON (#42525) (#42535)
+- Ensure DAG trigger form submits with updated parameters upon keyboard submit (#42487) (#42499)
+- Do not attempt to provide not ``stringified`` objects to UI via xcom if pickling is active (#42388) (#42486)
+- Fix the span link of task instance to point to the correct span in the scheduler_job_loop (#42430) (#42480)
+- Bugfix task execution from runner in Windows (#42426) (#42478)
+- Allows overriding the hardcoded OTEL_SERVICE_NAME with an environment variable (#42242) (#42441)
+- Improves trigger performance by using ``selectinload`` instead of ``joinedload`` (#40487) (#42351)
+- Suppress warnings when masking sensitive configs (#43335) (#43337)
+- Masking configuration values irrelevant to DAG author (#43040) (#43336)
+- Execute templated bash script as file in BashOperator (#43191)
+- Fixes schedule_downstream_tasks to include upstream tasks for one_success trigger rule (#42582) (#43299)
+- Add retry logic in the scheduler for updating trigger timeouts in case of deadlocks. (#41429) (#42651)
+- Mark all tasks as skipped when failing a dag_run manually (#43572)
+- Fix ``TrySelector`` for Mapped Tasks in Logs and Details Grid Panel (#43566)
+- Conditionally add OTEL events when processing executor events (#43558) (#43567)
+- Fix broken stat ``scheduler_loop_duration`` (#42886) (#43544)
+- Ensure total_entries in /api/v1/dags (#43377) (#43429)
+- Include limit and offset in request body schema for List task instances (batch) endpoint (#43479)
+- Don't raise a warning in ExecutorSafeguard when execute is called from an extended operator (#42849) (#43577)
+
+Miscellaneous
+"""""""""""""
+- Deprecate session auth backend (#42911)
+- Removed unicodecsv dependency for providers with Airflow version 2.8.0 and above (#42765) (#42970)
+- Remove the referrer from Webserver to Scarf (#42901) (#42942)
+- Bump ``dompurify`` from 2.2.9 to 2.5.6 in /airflow/www (#42263) (#42270)
+- Correct docstring format in _get_template_context (#42244) (#42272)
+- Backport: Bump Flask-AppBuilder to ``4.5.2`` (#43309) (#43318)
+- Check python version that was used to install pre-commit venvs (#43282) (#43310)
+- Resolve warning in Dataset Alias migration (#43425)
+
+Doc Only Changes
+""""""""""""""""
+- Clarifying PLUGINS_FOLDER permissions by DAG authors (#43022) (#43029)
+- Add templating info to TaskFlow tutorial (#42992)
+- Airflow local settings no longer importable from dags folder (#42231) (#42603)
+- Fix documentation for cpu and memory usage (#42147) (#42256)
+- Fix instruction for docker compose (#43119) (#43321)
+- Updates documentation to reflect that dag_warnings is returned instead of import_errors. (#42858) (#42888)
+
+
+Airflow 2.10.2 (2024-09-18)
+---------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+No significant changes.
+
+Bug Fixes
+"""""""""
+- Revert "Fix: DAGs are not marked as stale if the dags folder change" (#42220, #42217)
+- Add missing open telemetry span and correct scheduled slots documentation (#41985)
+- Fix require_confirmation_dag_change (#42063) (#42211)
+- Only treat null/undefined as falsy when rendering XComEntry (#42199) (#42213)
+- Add extra and ``renderedTemplates`` as keys to skip ``camelCasing`` (#42206) (#42208)
+- Do not ``camelcase`` xcom entries (#42182) (#42187)
+- Fix task_instance and dag_run links from list views (#42138) (#42143)
+- Support multi-line input for Params of type string in trigger UI form (#40414) (#42139)
+- Fix details tab log url detection (#42104) (#42114)
+- Add new type of exception to catch timeout (#42064) (#42078)
+- Rewrite how DAG to dataset / dataset alias are stored (#41987) (#42055)
+- Allow dataset alias to add more than one dataset events (#42189) (#42247)
+
+Miscellaneous
+"""""""""""""
+- Limit universal-pathlib below ``0.2.4`` as it breaks our integration (#42101)
+- Auto-fix default deferrable with ``LibCST`` (#42089)
+- Deprecate ``--tree`` flag for ``tasks list`` cli command (#41965)
+
+Doc Only Changes
+""""""""""""""""
+- Update ``security_model.rst`` to clear unauthenticated endpoints exceptions (#42085)
+- Add note about dataclasses and attrs to XComs page (#42056)
+- Improve docs on markdown docs in DAGs (#42013)
+- Add warning that listeners can be dangerous (#41968)
+
+
+Airflow 2.10.1 (2024-09-05)
+---------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+No significant changes.
+
+Bug Fixes
+"""""""""
+- Handle Example dags case when checking for missing files (#41874)
+- Fix logout link in "no roles" error page (#41845)
+- Set end_date and duration for triggers completed with end_from_trigger as True. (#41834)
+- DAGs are not marked as stale if the dags folder change (#41829)
+- Fix compatibility with FAB provider versions <1.3.0 (#41809)
+- Don't Fail LocalTaskJob on heartbeat (#41810)
+- Remove deprecation warning for cgitb in Plugins Manager (#41793)
+- Fix log for notifier(instance) without ``__name__`` (#41699)
+- Splitting syspath preparation into stages (#41694)
+- Adding url sanitization for extra links (#41680)
+- Fix InletEventsAccessors type stub (#41607)
+- Fix UI rendering when XCom is INT, FLOAT, BOOL or NULL (#41605)
+- Fix try selector refresh (#41503)
+- Incorrect try number subtraction producing invalid span id for OTEL airflow (#41535)
+- Add WebEncoder for trigger page rendering to avoid render failure (#41485)
+- Adding ``tojson`` filter to example_inlet_event_extra example dag (#41890)
+- Add backward compatibility check for executors that don't inherit BaseExecutor (#41927)
+
+Miscellaneous
+"""""""""""""
+- Bump webpack from 5.76.0 to 5.94.0 in /airflow/www (#41879)
+- Adding rel property to hyperlinks in logs (#41783)
+- Field Deletion Warning when editing Connections (#41504)
+- Make Scarf usage reporting in major+minor versions and counters in buckets (#41900)
+- Lower down universal-pathlib minimum to 0.2.2 (#41943)
+- Protect against None components of universal pathlib xcom backend (#41938)
+
+Doc Only Changes
+""""""""""""""""
+- Remove Debian bullseye support (#41569)
+- Add an example for auth with ``keycloak`` (#41791)
+
+
+Airflow 2.10.0 (2024-08-15)
+---------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+Scarf based telemetry: Airflow now collect telemetry data (#39510)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Airflow integrates Scarf to collect basic usage data during operation. Deployments can opt-out of data collection by
+setting the ``[usage_data_collection]enabled`` option to ``False``, or the ``SCARF_ANALYTICS=false`` environment variable.
+
+Datasets no longer trigger inactive DAGs (#38891)
+"""""""""""""""""""""""""""""""""""""""""""""""""
+
+Previously, when a DAG is paused or removed, incoming dataset events would still
+trigger it, and the DAG would run when it is unpaused or added back in a DAG
+file. This has been changed; a DAG's dataset schedule can now only be satisfied
+by events that occur when the DAG is active. While this is a breaking change,
+the previous behavior is considered a bug.
+
+The behavior of time-based scheduling is unchanged, including the timetable part
+of ``DatasetOrTimeSchedule``.
+
+``try_number`` is no longer incremented during task execution (#39336)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Previously, the try number (``try_number``) was incremented at the beginning of task execution on the worker. This was problematic for many reasons.
+For one it meant that the try number was incremented when it was not supposed to, namely when resuming from reschedule or deferral. And it also resulted in
+the try number being "wrong" when the task had not yet started. The workarounds for these two issues caused a lot of confusion.
+
+Now, instead, the try number for a task run is determined at the time the task is scheduled, and does not change in flight, and it is never decremented.
+So after the task runs, the observed try number remains the same as it was when the task was running; only when there is a "new try" will the try number be incremented again.
+
+One consequence of this change is, if users were "manually" running tasks (e.g. by calling ``ti.run()`` directly, or command line ``airflow tasks run``),
+try number will no longer be incremented. Airflow assumes that tasks are always run after being scheduled by the scheduler, so we do not regard this as a breaking change.
+
+``/logout`` endpoint in FAB Auth Manager is now CSRF protected (#40145)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+The ``/logout`` endpoint's method in FAB Auth Manager has been changed from ``GET`` to ``POST`` in all existing
+AuthViews (``AuthDBView``, ``AuthLDAPView``, ``AuthOAuthView``, ``AuthOIDView``, ``AuthRemoteUserView``), and
+now includes CSRF protection to enhance security and prevent unauthorized logouts.
+
+OpenTelemetry Traces for Apache Airflow (#37948).
+"""""""""""""""""""""""""""""""""""""""""""""""""
+This new feature adds capability for Apache Airflow to emit 1) airflow system traces of scheduler,
+triggerer, executor, processor 2) DAG run traces for deployed DAG runs in OpenTelemetry format. Previously, only metrics were supported which emitted metrics in OpenTelemetry.
+This new feature will add richer data for users to use OpenTelemetry standard to emit and send their trace data to OTLP compatible endpoints.
+
+Decorator for Task Flow ``(@skip_if, @run_if)`` to make it simple to apply whether or not to skip a Task. (#41116)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+This feature adds a decorator to make it simple to skip a Task.
+
+Using Multiple Executors Concurrently (#40701)
+""""""""""""""""""""""""""""""""""""""""""""""
+Previously known as hybrid executors, this new feature allows Airflow to use multiple executors concurrently. DAGs, or even individual tasks, can be configured
+to use a specific executor that suits its needs best. A single DAG can contain tasks all using different executors. Please see the Airflow documentation for
+more details. Note: This feature is still experimental. See `documentation on Executor <https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/executor/index.html#using-multiple-executors-concurrently>`_ for a more detailed description.
+
+New Features
+""""""""""""
+- AIP-61 Hybrid Execution (`AIP-61 <https://github.com/apache/airflow/pulls?q=is%3Apr+label%3Aarea%3Ahybrid-executors+is%3Aclosed+milestone%3A%22Airflow+2.10.0%22>`_)
+- AIP-62 Getting Lineage from Hook Instrumentation (`AIP-62 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3AAIP-62+milestone%3A%22Airflow+2.10.0%22>`_)
+- AIP-64 TaskInstance Try History (`AIP-64 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3AAIP-64+milestone%3A%22Airflow+2.10.0%22>`_)
+- AIP-44 Internal API (`AIP-44 <https://github.com/apache/airflow/pulls?q=is%3Apr+label%3AAIP-44+milestone%3A%22Airflow+2.10.0%22+is%3Aclosed>`_)
+- Enable ending the task directly from the triggerer without going into the worker. (#40084)
+- Extend dataset dependencies (#40868)
+- Feature/add token authentication to internal api (#40899)
+- Add DatasetAlias to support dynamic Dataset Event Emission and Dataset Creation (#40478)
+- Add example DAGs for inlet_events (#39893)
+- Implement ``accessors`` to read dataset events defined as inlet (#39367)
+- Decorator for Task Flow, to make it simple to apply whether or not to skip a Task. (#41116)
+- Add start execution from triggerer support to dynamic task mapping (#39912)
+- Add try_number to log table (#40739)
+- Added ds_format_locale method in macros which allows localizing datetime formatting using Babel (#40746)
+- Add DatasetAlias to support dynamic Dataset Event Emission and Dataset Creation (#40478, #40723, #40809, #41264, #40830, #40693, #41302)
+- Use sentinel to mark dag as removed on re-serialization (#39825)
+- Add parameter for the last number of queries to the DB in DAG file processing stats (#40323)
+- Add prototype version dark mode for Airflow UI (#39355)
+- Add ability to mark some tasks as successful in ``dag test``  (#40010)
+- Allow use of callable for template_fields (#37028)
+- Filter running/failed and active/paused dags on the home page(#39701)
+- Add metrics about task CPU and memory usage (#39650)
+- UI changes for DAG Re-parsing feature (#39636)
+- Add Scarf based telemetry (#39510, #41318)
+- Add dag re-parsing request endpoint (#39138)
+- Redirect to new DAGRun after trigger from Grid view (#39569)
+- Display ``endDate`` in task instance tooltip. (#39547)
+- Implement ``accessors`` to read dataset events defined as inlet (#39367, #39893)
+- Add color to log lines in UI for error and warnings based on keywords (#39006)
+- Add Rendered k8s pod spec tab to ti details view (#39141)
+- Make audit log before/after filterable (#39120)
+- Consolidate grid collapse actions to a single full screen toggle (#39070)
+- Implement Metadata to emit runtime extra (#38650)
+- Add executor field to the DB and parameter to the operators (#38474)
+- Implement context accessor for DatasetEvent extra (#38481)
+- Add dataset event info to dag graph (#41012)
+- Add button to toggle datasets on/off in dag graph (#41200)
+- Add ``run_if`` & ``skip_if`` decorators (#41116)
+- Add dag_stats rest api endpoint (#41017)
+- Add listeners for Dag import errors (#39739)
+- Allowing DateTimeSensorAsync, FileSensor and TimeSensorAsync to start execution from trigger during dynamic task mapping (#41182)
+
+
+Improvements
+""""""""""""
+- Allow set Dag Run resource into Dag Level permission: extends Dag's access_control feature to allow Dag Run resource permissions. (#40703)
+- Improve security and error handling for the internal API (#40999)
+- Datasets UI Improvements (#40871)
+- Change DAG Audit log tab to Event Log (#40967)
+- Make standalone dag file processor works in DB isolation mode (#40916)
+- Show only the source on the consumer DAG page and only triggered DAG run in the producer DAG page (#41300)
+- Update metrics names to allow multiple executors to report metrics (#40778)
+- Format DAG run count (#39684)
+- Update styles for ``renderedjson`` component (#40964)
+- Improve ATTRIBUTE_REMOVED sentinel to use class and more context (#40920)
+- Make XCom display as react json (#40640)
+- Replace usages of task context logger with the log table (#40867)
+- Rollback for all retry exceptions (#40882) (#40883)
+- Support rendering ObjectStoragePath value (#40638)
+- Add try_number and map_index as params for log event endpoint (#40845)
+- Rotate fernet key in batches to limit memory usage (#40786)
+- Add gauge metric for 'last_num_of_db_queries' parameter (#40833)
+- Set parallelism log messages to warning level for better visibility (#39298)
+- Add error handling for encoding the dag runs (#40222)
+- Use params instead of dag_run.conf in example DAG (#40759)
+- Load Example Plugins with Example DAGs (#39999)
+- Stop deferring TimeDeltaSensorAsync task when the target_dttm is in the past (#40719)
+- Send important executor logs to task logs (#40468)
+- Open external links in new tabs (#40635)
+- Attempt to add ReactJSON view to rendered templates (#40639)
+- Speeding up regex match time for custom warnings (#40513)
+- Refactor DAG.dataset_triggers into the timetable class (#39321)
+- add next_kwargs to StartTriggerArgs (#40376)
+- Improve UI error handling (#40350)
+- Remove double warning in CLI  when config value is deprecated (#40319)
+- Implement XComArg concat() (#40172)
+- Added ``get_extra_dejson`` method with nested parameter which allows you to specify if you want the nested json as string to be also deserialized (#39811)
+- Add executor field to the task instance API (#40034)
+- Support checking for db path absoluteness on Windows (#40069)
+- Introduce StartTriggerArgs and prevent start trigger initialization in scheduler (#39585)
+- Add task documentation to details tab in grid view (#39899)
+- Allow executors to be specified with only the class name of the Executor (#40131)
+- Remove obsolete conditional logic related to try_number (#40104)
+- Allow Task Group Ids to be passed as branches in BranchMixIn (#38883)
+- Javascript connection form will apply CodeMirror to all textarea's dynamically (#39812)
+- Determine needs_expansion at time of serialization (#39604)
+- Add indexes on dag_id column in referencing tables to speed up deletion of dag records (#39638)
+- Add task failed dependencies to details page (#38449)
+- Remove webserver try_number adjustment (#39623)
+- Implement slicing in lazy sequence (#39483)
+- Unify lazy db sequence implementations (#39426)
+- Add ``__getattr__`` to task decorator stub (#39425)
+- Allow passing labels to FAB Views registered via Plugins (#39444)
+- Simpler error message when trying to offline migrate with sqlite (#39441)
+- Add soft_fail to TriggerDagRunOperator (#39173)
+- Rename "dataset event" in context to use "outlet" (#39397)
+- Resolve ``RemovedIn20Warning`` in ``airflow task`` command (#39244)
+- Determine fail_stop on client side when db isolated (#39258)
+- Refactor cloudpickle support in Python operators/decorators (#39270)
+- Update trigger kwargs migration to specify existing_nullable (#39361)
+- Allowing tasks to start execution directly from triggerer without going to worker (#38674)
+- Better ``db migrate`` error messages (#39268)
+- Add stacklevel into the ``suppress_and_warn`` warning (#39263)
+- Support searching by dag_display_name (#39008)
+- Allow sort by on all fields in MappedInstances.tsx (#38090)
+- Expose count of scheduled tasks in metrics (#38899)
+- Use ``declarative_base`` from ``sqlalchemy.orm`` instead of ``sqlalchemy.ext.declarative`` (#39134)
+- Add example DAG to demonstrate emitting approaches (#38821)
+- Give ``on_task_instance_failed`` access to the error that caused the failure (#38155)
+- Simplify dataset serialization (#38694)
+- Add heartbeat recovery message to jobs (#34457)
+- Remove select_column option in TaskInstance.get_task_instance (#38571)
+- Don't create session in get_dag if not reading dags from database (#38553)
+- Add a migration script for encrypted trigger kwargs (#38358)
+- Implement render_templates on TaskInstancePydantic (#38559)
+- Handle optional session in _refresh_from_db (#38572)
+- Make type annotation less confusing in task_command.py (#38561)
+- Use fetch_dagrun directly to avoid session creation (#38557)
+- Added ``output_processor`` parameter to ``BashProcessor`` (#40843)
+- Improve serialization for Database Isolation Mode (#41239)
+- Only orphan non-orphaned Datasets (#40806)
+- Adjust gantt width based on task history dates (#41192)
+- Enable scrolling on legend with high number of elements. (#41187)
+
+Bug Fixes
+"""""""""
+- Bugfix for get_parsing_context() when ran with LocalExecutor (#40738)
+- Validating provider documentation urls before displaying in views (#40933)
+- Move import to make PythonOperator working on Windows (#40424)
+- Fix dataset_with_extra_from_classic_operator example DAG (#40747)
+- Call listener on_task_instance_failed() after ti state is changed (#41053)
+- Add ``never_fail`` in BaseSensor (#40915)
+- Fix tasks API endpoint when DAG doesn't have ``start_date`` (#40878)
+- Fix and adjust URL generation for UI grid and older runs (#40764)
+- Rotate fernet key optimization (#40758)
+- Fix class instance vs. class type in validate_database_executor_compatibility() call (#40626)
+- Clean up dark mode (#40466)
+- Validate expected types for args for DAG, BaseOperator and TaskGroup (#40269)
+- Exponential Backoff Not Functioning in BaseSensorOperator Reschedule Mode (#39823)
+- local task job: add timeout, to not kill on_task_instance_success listener prematurely (#39890)
+- Move Post Execution Log Grouping behind Exception Print (#40146)
+- Fix triggerer race condition in HA setting (#38666)
+- Pass triggered or existing DAG Run logical date to DagStateTrigger (#39960)
+- Passing ``external_task_group_id`` to ``WorkflowTrigger`` (#39617)
+- ECS Executor: Set tasks to RUNNING state once active (#39212)
+- Only heartbeat if necessary in backfill loop (#39399)
+- Fix trigger kwarg encryption migration (#39246)
+- Fix decryption of trigger kwargs when downgrading. (#38743)
+- Fix wrong link in TriggeredDagRuns (#41166)
+- Pass MapIndex to LogLink component for external log systems (#41125)
+- Add NonCachingRotatingFileHandler for worker task (#41064)
+- Add argument include_xcom in method resolve an optional value (#41062)
+- Sanitizing file names in example_bash_decorator DAG (#40949)
+- Show dataset aliases in dependency graphs (#41128)
+- Render Dataset Conditions in DAG Graph view (#41137)
+- Add task duration plot across dagruns (#40755)
+- Add start execution from trigger support for existing core sensors (#41021)
+- add example dag for dataset_alias (#41037)
+- Add dataset alias unique constraint and remove wrong dataset alias removing logic (#41097)
+- Set "has_outlet_datasets" to true if "dataset alias" exists (#41091)
+- Make HookLineageCollector group datasets by (#41034)
+- Enhance start_trigger_args serialization (#40993)
+- Refactor ``BaseSensorOperator`` introduce ``skip_policy`` parameter (#40924)
+- Fix viewing logs from triggerer when task is deferred (#41272)
+- Refactor how triggered dag run url is replaced (#41259)
+- Added support for additional sql alchemy session args (#41048)
+- Allow empty list in TriggerDagRun failed_state (#41249)
+- Clean up the exception handler when run_as_user is the airflow user  (#41241)
+- Collapse docs when click and folded (#41214)
+- Update updated_at when saving to db as session.merge does not trigger on-update (#40782)
+- Fix query count statistics when parsing DAF file (#41149)
+- Method Resolution Order in operators without ``__init__`` (#41086)
+- Ensure try_number incremented for empty operator (#40426)
+
+Miscellaneous
+"""""""""""""
+- Remove the Experimental flag from ``OTel`` Traces (#40874)
+- Bump packaging version to 23.0 in order to fix issue with older otel (#40865)
+- Simplify _auth_manager_is_authorized_map function (#40803)
+- Use correct unknown executor exception in scheduler job (#40700)
+- Add D1 ``pydocstyle`` rules to pyproject.toml (#40569)
+- Enable enforcing ``pydocstyle`` rule D213 in ruff. (#40448, #40464)
+- Update ``Dag.test()`` to run with an executor if desired (#40205)
+- Update jest and babel minor versions (#40203)
+- Refactor BashOperator and Bash decorator for consistency and simplicity (#39871)
+- Add ``AirflowInternalRuntimeError`` for raise ``non catchable`` errors (#38778)
+- ruff version bump 0.4.5 (#39849)
+- Bump ``pytest`` to 8.0+ (#39450)
+- Remove stale comment about TI index (#39470)
+- Configure ``back_populates`` between ``DagScheduleDatasetReference.dag`` and ``DagModel.schedule_dataset_references`` (#39392)
+- Remove deprecation warnings in endpoints.py (#39389)
+- Fix SQLA deprecations in Airflow core (#39211)
+- Use class-bound attribute directly in SA (#39198, #39195)
+- Fix stacklevel for TaskContextLogger (#39142)
+- Capture warnings during collect DAGs (#39109)
+- Resolve ``B028`` (no-explicit-stacklevel) in core (#39123)
+- Rename model ``ImportError`` to ``ParseImportError`` for avoid shadowing with builtin exception (#39116)
+- Add option to support cloudpickle in PythonVenv/External Operator (#38531)
+- Suppress ``SubDagOperator`` examples warnings (#39057)
+- Add log for running callback (#38892)
+- Use ``model_dump`` instead of ``dict`` for serialize Pydantic V2 model (#38933)
+- Widen cheat sheet column to avoid wrapping commands (#38888)
+- Update hatchling to latest version (1.22.5) (#38780)
+- bump uv to 0.1.29 (#38758)
+- Add missing serializations found during provider tests fixing (#41252)
+- Bump ``ws`` from 7.5.5 to 7.5.10 in /airflow/www (#40288)
+- Improve typing for allowed/failed_states in TriggerDagRunOperator (#39855)
+
+Doc Only Changes
+""""""""""""""""
+- Add ``filesystems`` and ``dataset-uris`` to "how to create your own provider" page (#40801)
+- Fix (TM) to (R) in Airflow repository (#40783)
+- Set ``otel_on`` to True in example airflow.cfg (#40712)
+- Add warning for _AIRFLOW_PATCH_GEVENT  (#40677)
+- Update multi-team diagram proposal after Airflow 3 discussions (#40671)
+- Add stronger warning that MSSQL is not supported and no longer functional (#40565)
+- Fix misleading mac menu structure in howto (#40440)
+- Update k8s supported version in docs (#39878)
+- Add compatibility note for Listeners (#39544)
+- Update edge label image in documentation example with the new graph view (#38802)
+- Update UI doc screenshots (#38680)
+- Add section "Manipulating queued dataset events through REST API" (#41022)
+- Add information about lack of security guarantees for docker compose (#41072)
+- Add links to example dags in use params section (#41031)
+- Change ``task_id`` from ``send_email`` to ``send_email_notification`` in ``taskflow.rst`` (#41060)
+- Remove unnecessary nginx redirect rule from reverse proxy documentation (#38953)
+
+
+
+Airflow 2.9.3 (2024-07-15)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+Time unit for ``scheduled_duration`` and ``queued_duration`` changed (#37936)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+``scheduled_duration`` and ``queued_duration`` metrics are now emitted in milliseconds instead of seconds.
+
+By convention all statsd metrics should be emitted in milliseconds, this is later expected in e.g. ``prometheus`` statsd-exporter.
+
+
+Support for OpenTelemetry Metrics is no longer "Experimental" (#40286)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Experimental support for OpenTelemetry was added in 2.7.0 since then fixes and improvements were added and now we announce the feature as stable.
+
+
+
+Bug Fixes
+"""""""""
+- Fix calendar view scroll (#40458)
+- Validating provider description for urls in provider list view (#40475)
+- Fix compatibility with old MySQL 8.0 (#40314)
+- Fix dag (un)pausing won't work on environment where dag files are missing (#40345)
+- Extra being passed to SQLalchemy (#40391)
+- Handle unsupported operand int + str when value of tag is int (job_id) (#40407)
+- Fix TriggeredDagRunOperator triggered link (#40336)
+- Add ``[webserver]update_fab_perms`` to deprecated configs (#40317)
+- Swap dag run link from legacy graph to grid with graph tab (#40241)
+- Change ``httpx`` to ``requests`` in ``file_task_handler`` (#39799)
+- Fix import future annotations in venv jinja template (#40208)
+- Ensures DAG params order regardless of backend (#40156)
+- Use a join for TI notes in TI batch API endpoint (#40028)
+- Improve trigger UI for string array format validation (#39993)
+- Disable jinja2 rendering for doc_md (#40522)
+- Skip checking sub dags list if taskinstance state is skipped (#40578)
+- Recognize quotes when parsing urls in logs (#40508)
+
+Doc Only Changes
+""""""""""""""""
+- Add notes about passing secrets via environment variables (#40519)
+- Revamp some confusing log messages (#40334)
+- Add more precise description of masking sensitive field names (#40512)
+- Add slightly more detailed guidance about upgrading to the docs (#40227)
+- Metrics allow_list complete example (#40120)
+- Add warning to deprecated api docs that access control isn't applied (#40129)
+- Simpler command to check local scheduler is alive (#40074)
+- Add a note and an example clarifying the usage of DAG-level params (#40541)
+- Fix highlight of example code in dags.rst (#40114)
+- Add warning about the PostgresOperator being deprecated (#40662)
+- Updating airflow download links to CDN based links (#40618)
+- Fix import statement for DatasetOrTimetable example (#40601)
+- Further clarify triage process (#40536)
+- Fix param order in PythonOperator docstring (#40122)
+- Update serializers.rst to mention that bytes are not supported (#40597)
+
+Miscellaneous
+"""""""""""""
+- Upgrade build installers and dependencies (#40177)
+- Bump braces from 3.0.2 to 3.0.3 in /airflow/www (#40180)
+- Upgrade to another version of trove-classifier (new CUDA classifiers) (#40564)
+- Rename "try_number" increments that are unrelated to the airflow concept (#39317)
+- Update trove classifiers to the latest version as build dependency (#40542)
+- Upgrade to latest version of hatchling as build dependency (#40387)
+- Fix bug in ``SchedulerJobRunner._process_executor_events`` (#40563)
+- Remove logging for "blocked" events (#40446)
+
+
+
+Airflow 2.9.2 (2024-06-10)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+No significant changes.
+
+Bug Fixes
+"""""""""
+- Fix bug that makes ``AirflowSecurityManagerV2`` leave transactions in the ``idle in transaction`` state (#39935)
+- Fix alembic auto-generation and rename mismatching constraints (#39032)
+- Add the existing_nullable to the downgrade side of the migration (#39374)
+- Fix Mark Instance state buttons stay disabled if user lacks permission (#37451). (#38732)
+- Use SKIP LOCKED instead of NOWAIT in mini scheduler (#39745)
+- Remove DAG Run Add option from FAB view (#39881)
+- Add max_consecutive_failed_dag_runs in API spec (#39830)
+- Fix example_branch_operator failing in python 3.12 (#39783)
+- Fetch served logs also when task attempt is up for retry and no remote logs available (#39496)
+- Change dataset URI validation to raise warning instead of error in Airflow 2.9 (#39670)
+- Visible DAG RUN doesn't point to the same dag run id (#38365)
+- Refactor ``SafeDogStatsdLogger`` to use ``get_validator`` to enable pattern matching (#39370)
+- Fix custom actions in security manager ``has_access`` (#39421)
+- Fix HTTP 500 Internal Server Error if DAG is triggered with bad params (#39409)
+- Fix static file caching is disabled in Airflow Webserver. (#39345)
+- Fix TaskHandlerWithCustomFormatter now adds prefix only once (#38502)
+- Do not provide deprecated ``execution_date`` in ``@apply_lineage`` (#39327)
+- Add missing conn_id to string representation of ObjectStoragePath (#39313)
+- Fix ``sql_alchemy_engine_args`` config example (#38971)
+- Add Cache-Control "no-store" to all dynamically generated content (#39550)
+
+Miscellaneous
+"""""""""""""
+- Limit ``yandex`` provider to avoid ``mypy`` errors (#39990)
+- Warn on mini scheduler failures instead of debug (#39760)
+- Change type definition for ``provider_info_cache`` decorator (#39750)
+- Better typing for BaseOperator ``defer`` (#39742)
+- More typing in TimeSensor and TimeSensorAsync (#39696)
+- Re-raise exception from strict dataset URI checks (#39719)
+- Fix stacklevel for _log_state helper (#39596)
+- Resolve SA warnings in migrations scripts (#39418)
+- Remove unused index ``idx_last_scheduling_decision`` on ``dag_run`` table (#39275)
+
+Doc Only Changes
+""""""""""""""""
+- Provide extra tip on labeling DynamicTaskMapping (#39977)
+- Improve visibility of links / variables / other configs in Configuration Reference (#39916)
+- Remove 'legacy' definition for ``CronDataIntervalTimetable`` (#39780)
+- Update plugins.rst examples to use pyproject.toml over setup.py (#39665)
+- Fix nit in pg set-up doc (#39628)
+- Add Matomo to Tracking User Activity docs (#39611)
+- Fix Connection.get -> Connection. get_connection_from_secrets (#39560)
+- Adding note for provider dependencies (#39512)
+- Update docker-compose command (#39504)
+- Update note about restarting triggerer process (#39436)
+- Updating S3LogLink with an invalid bucket link (#39424)
+- Update testing_packages.rst (#38996)
+- Add multi-team diagrams (#38861)
+
+
+
+Airflow 2.9.1 (2024-05-03)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+Stackdriver logging bugfix requires Google provider ``10.17.0`` or later (#38071)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+If you use Stackdriver logging, you must use Google provider version ``10.17.0`` or later. Airflow ``2.9.1`` now passes ``gcp_log_name`` to the ``StackdriverTaskHandler`` instead of ``name``, and this will fail on earlier provider versions.
+
+This fixes a bug where the log name configured in ``[logging] remove_base_log_folder`` was overridden when Airflow configured logging, resulting in task logs going to the wrong destination.
+
+
+
+Bug Fixes
+"""""""""
+- Make task log messages include run_id (#39280)
+- Copy menu_item ``href`` for nav bar (#39282)
+- Fix trigger kwarg encryption migration (#39246, #39361, #39374)
+- Add workaround for datetime-local input in ``firefox`` (#39261)
+- Add Grid button to Task Instance view (#39223)
+- Get served logs when remote or executor logs not available for non-running task try (#39177)
+- Fixed side effect of menu filtering causing disappearing menus (#39229)
+- Use grid view for Task Instance's ``log_url`` (#39183)
+- Improve task filtering ``UX`` (#39119)
+- Improve rendered_template ``ux`` in react dag page (#39122)
+- Graph view improvements (#38940)
+- Check that the dataset<>task exists before trying to render graph (#39069)
+- Hostname was "redacted", not "redact"; remove it when there is no context (#39037)
+- Check whether ``AUTH_ROLE_PUBLIC`` is set in ``check_authentication`` (#39012)
+- Move rendering of ``map_index_template`` so it renders for failed tasks as long as it was defined before the point of failure (#38902)
+- ``Undeprecate`` ``BaseXCom.get_one`` method for now (#38991)
+- Add ``inherit_cache`` attribute for ``CreateTableAs`` custom SA Clause (#38985)
+- Don't wait for DagRun lock in mini scheduler (#38914)
+- Fix calendar view with no DAG Run (#38964)
+- Changed the background color of external task in graph (#38969)
+- Fix dag run selection (#38941)
+- Fix ``SAWarning`` 'Coercing Subquery object into a select() for use in IN()' (#38926)
+- Fix implicit ``cartesian`` product in AirflowSecurityManagerV2 (#38913)
+- Fix problem that links in legacy log view can not be clicked (#38882)
+- Fix dag run link params (#38873)
+- Use async db calls in WorkflowTrigger (#38689)
+- Fix audit log events filter (#38719)
+- Use ``methodtools.lru_cache`` instead of ``functools.lru_cache`` in class methods (#37757)
+- Raise deprecated warning in ``airflow dags backfill`` only if ``-I`` / ``--ignore-first-depends-on-past`` provided (#38676)
+
+Miscellaneous
+"""""""""""""
+- ``TriggerDagRunOperator`` deprecate ``execution_date`` in favor of ``logical_date`` (#39285)
+- Force to use Airflow Deprecation warnings categories on ``@deprecated`` decorator (#39205)
+- Add warning about run/import Airflow under the Windows (#39196)
+- Update ``is_authorized_custom_view`` from auth manager to handle custom actions (#39167)
+- Add in Trove classifiers Python 3.12 support (#39004)
+- Use debug level for ``minischeduler`` skip (#38976)
+- Bump ``undici`` from ``5.28.3 to 5.28.4`` in ``/airflow/www`` (#38751)
+
+
+Doc Only Changes
+""""""""""""""""
+- Fix supported k8s version in docs (#39172)
+- Dynamic task mapping ``PythonOperator`` op_kwargs (#39242)
+- Add link to ``user`` and ``role`` commands (#39224)
+- Add ``k8s 1.29`` to supported version in docs (#39168)
+- Data aware scheduling docs edits (#38687)
+- Update ``DagBag`` class docstring to include all params (#38814)
+- Correcting an example taskflow example (#39015)
+- Remove decorator from rendering fields example (#38827)
+
+
+
+Airflow 2.9.0 (2024-04-08)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+Following Listener API methods are considered stable and can be used for production system (were experimental feature in older Airflow versions) (#36376):
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Lifecycle events:
+
+- ``on_starting``
+- ``before_stopping``
+
+DagRun State Change Events:
+
+- ``on_dag_run_running``
+- ``on_dag_run_success``
+- ``on_dag_run_failed``
+
+TaskInstance State Change Events:
+
+- ``on_task_instance_running``
+- ``on_task_instance_success``
+- ``on_task_instance_failed``
+
+Support for Microsoft SQL-Server for Airflow Meta Database has been removed (#36514)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+After `discussion <https://lists.apache.org/thread/r06j306hldg03g2my1pd4nyjxg78b3h4>`__
+and a `voting process <https://lists.apache.org/thread/pgcgmhf6560k8jbsmz8nlyoxosvltph2>`__,
+the Airflow's PMC members and Committers have reached a resolution to no longer maintain MsSQL as a
+supported Database Backend.
+
+As of Airflow 2.9.0 support of MsSQL has been removed for Airflow Database Backend.
+
+A migration script which can help migrating the database *before* upgrading to Airflow 2.9.0 is available in
+`airflow-mssql-migration repo on Github <https://github.com/apache/airflow-mssql-migration>`_.
+Note that the migration script is provided without support and warranty.
+
+This does not affect the existing provider packages (operators and hooks), DAGs can still access and process data from MsSQL.
+
+Dataset URIs are now validated on input (#37005)
+""""""""""""""""""""""""""""""""""""""""""""""""
+
+Datasets must use a URI that conform to rules laid down in AIP-60, and the value
+will be automatically normalized when the DAG file is parsed. See
+`documentation on Datasets <https://airflow.apache.org/docs/apache-airflow/2.9.0/authoring-and-scheduling/datasets.html>`_ for
+a more detailed description on the rules.
+
+You may need to change your Dataset identifiers if they look like a URI, but are
+used in a less mainstream way, such as relying on the URI's auth section, or
+have a case-sensitive protocol name.
+
+The method ``get_permitted_menu_items`` in ``BaseAuthManager`` has been renamed ``filter_permitted_menu_items`` (#37627)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Add REST API actions to Audit Log events (#37734)
+"""""""""""""""""""""""""""""""""""""""""""""""""
+
+The Audit Log ``event`` name for REST API events will be prepended with ``api.`` or ``ui.``, depending on if it came from the Airflow UI or externally.
+
+Official support for Python 3.12 (#38025)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+There are a few caveats though:
+
+* Pendulum2 does not support Python 3.12. For Python 3.12 you need to use
+  `Pendulum 3 <https://pendulum.eustace.io/blog/announcing-pendulum-3-0-0.html>`_
+
+* Minimum SQLAlchemy version supported when Pandas is installed for Python 3.12 is ``1.4.36`` released in
+  April 2022. Airflow 2.9.0 increases the minimum supported version of SQLAlchemy to ``1.4.36`` for all
+  Python versions.
+
+Not all Providers support Python 3.12. At the initial release of Airflow 2.9.0 the following providers
+are released without support for Python 3.12:
+
+  * ``apache.beam`` - pending on `Apache Beam support for 3.12 <https://github.com/apache/beam/issues/29149>`_
+  * ``papermill`` - pending on Releasing Python 3.12 compatible papermill client version
+    `including this merged issue <https://github.com/nteract/papermill/pull/771>`_
+
+Prevent large string objects from being stored in the Rendered Template Fields (#38094)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+There's now a limit to the length of data that can be stored in the Rendered Template Fields.
+The limit is set to 4096 characters. If the data exceeds this limit, it will be truncated. You can change this limit
+by setting the ``[core]max_template_field_length`` configuration option in your airflow config.
+
+Change xcom table column value type to longblob for MySQL backend (#38401)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Xcom table column ``value`` type has changed from ``blob`` to ``longblob``. This will allow you to store relatively big data in Xcom but process can take a significant amount of time if you have a lot of large data stored in Xcom.
+
+To downgrade from revision: ``b4078ac230a1``, ensure that you don't have Xcom values larger than 65,535 bytes. Otherwise, you'll need to clean those rows or run ``airflow db clean xcom`` to clean the Xcom table.
+
+Stronger validation for key parameter defaults in taskflow context variables (#38015)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+As for the taskflow implementation in conjunction with context variable defaults invalid parameter orders can be
+generated, it is now not accepted anymore (and validated) that taskflow functions are defined with defaults
+other than ``None``. If you have done this before you most likely will see a broken DAG and a error message like
+``Error message: Context key parameter my_param can't have a default other than None``.
+
+New Features
+""""""""""""
+- Allow users to write dag_id and task_id in their national characters, added display name for dag / task (v2) (#38446)
+- Prevent large objects from being stored in the RTIF (#38094)
+- Use current time to calculate duration when end date is not present. (#38375)
+- Add average duration mark line in task and dagrun duration charts. (#38214, #38434)
+- Add button to manually create dataset events (#38305)
+- Add ``Matomo`` as an option for analytics_tool. (#38221)
+- Experimental: Support custom weight_rule implementation to calculate the TI priority_weight (#38222)
+- Adding ability to automatically set DAG to off after X times it failed sequentially (#36935)
+- Add dataset conditions to next run datasets modal (#38123)
+- Add task log grouping to UI (#38021)
+- Add dataset_expression to grid dag details (#38121)
+- Introduce mechanism to support multiple executor configuration (#37635)
+- Add color formatting for ANSI chars in logs from task executions (#37985)
+- Add the dataset_expression as part of DagModel and DAGDetailSchema (#37826)
+- Allow longer rendered_map_index (#37798)
+- Inherit the run_ordering from DatasetTriggeredTimetable for DatasetOrTimeSchedule (#37775)
+- Implement AIP-60 Dataset URI formats (#37005)
+- Introducing Logical Operators for dataset conditional logic (#37101)
+- Add post endpoint for dataset events (#37570)
+- Show custom instance names for a mapped task in UI (#36797)
+- Add excluded/included events to get_event_logs api (#37641)
+- Add datasets to dag graph (#37604)
+- Show dataset events above task/run details in grid view (#37603)
+- Introduce new config variable to control whether DAG processor outputs to stdout (#37439)
+- Make Datasets ``hashable`` (#37465)
+- Add conditional logic for dataset triggering (#37016)
+- Implement task duration page in react. (#35863)
+- Add ``queuedEvent`` endpoint to get/delete DatasetDagRunQueue (#37176)
+- Support multiple XCom output in the BaseOperator (#37297)
+- AIP-58: Add object storage backend for xcom (#37058)
+- Introduce ``DatasetOrTimeSchedule`` (#36710)
+- Add ``on_skipped_callback`` to ``BaseOperator`` (#36374)
+- Allow override of hovered navbar colors (#36631)
+- Create new Metrics with Tagging (#36528)
+- Add support for openlineage to AFS and common.io (#36410)
+- Introduce ``@task.bash`` TaskFlow decorator (#30176, #37875)
+
+Improvements
+""""""""""""
+- More human friendly "show tables" output for db cleanup (#38654)
+- Improve trigger assign_unassigned by merging alive_triggerer_ids and get_sorted_triggers queries (#38664)
+- Add exclude/include events filters to audit log (#38506)
+- Clean up unused triggers in a single query for all dialects except MySQL (#38663)
+- Update Confirmation Logic for Config Changes on Sensitive Environments Like Production (#38299)
+- Improve datasets graph UX (#38476)
+- Only show latest dataset event timestamp after last run (#38340)
+- Add button to clear only failed tasks in a dagrun. (#38217)
+- Delete all old dag pages and redirect to grid view (#37988)
+- Check task attribute before use in sentry.add_tagging() (#37143)
+- Mysql change xcom value col type for MySQL backend (#38401)
+- ``ExternalPythonOperator`` use version from ``sys.version_info`` (#38377)
+- Replace too broad exceptions into the Core (#38344)
+- Add CLI support for bulk pause and resume of DAGs (#38265)
+- Implement methods on TaskInstancePydantic and DagRunPydantic (#38295, #38302, #38303, #38297)
+- Made filters bar collapsible and add a full screen toggle (#38296)
+- Encrypt all trigger attributes (#38233, #38358, #38743)
+- Upgrade react-table package. Use with Audit Log table (#38092)
+- Show if dag page filters are active (#38080)
+- Add try number to mapped instance (#38097)
+- Add retries to job heartbeat (#37541)
+- Add REST API events to Audit Log (#37734)
+- Make current working directory as templated field in BashOperator (#37968)
+- Add calendar view to react (#37909)
+- Add ``run_id`` column to log table (#37731)
+- Add ``tryNumber`` to grid task instance tooltip (#37911)
+- Session is not used in _do_render_template_fields (#37856)
+- Improve MappedOperator property types (#37870)
+- Remove provide_session decorator from TaskInstancePydantic methods (#37853)
+- Ensure the "airflow.task" logger used for TaskInstancePydantic and TaskInstance (#37857)
+- Better error message for internal api call error (#37852)
+- Increase tooltip size of dag grid view (#37782) (#37805)
+- Use named loggers instead of root logger (#37801)
+- Add Run Duration in React (#37735)
+- Avoid non-recommended usage of logging (#37792)
+- Improve DateTimeTrigger typing (#37694)
+- Make sure all unique run_ids render a task duration bar (#37717)
+- Add Dag Audit Log to React (#37682)
+- Add log event for auto pause (#38243)
+- Better message for exception for templated base operator fields (#37668)
+- Clean up webserver endpoints adding to audit log (#37580)
+- Filter datasets graph by dag_id (#37464)
+- Use new exception type inheriting BaseException for SIGTERMs (#37613)
+- Refactor dataset class inheritance (#37590)
+- Simplify checks for package versions (#37585)
+- Filter Datasets by associated dag_ids (GET /datasets) (#37512)
+- Enable "airflow tasks test" to run deferrable operator (#37542)
+- Make datasets list/graph width adjustable (#37425)
+- Speedup determine installed airflow version in ``ExternalPythonOperator`` (#37409)
+- Add more task details from rest api (#37394)
+- Add confirmation dialog box for DAG run actions (#35393)
+- Added shutdown color to the STATE_COLORS (#37295)
+- Remove legacy dag details page and redirect to grid (#37232)
+- Order XCom entries by map index in API (#37086)
+- Add data_interval_start and data_interval_end in dagrun create API endpoint (#36630)
+- Making links in task logs as hyperlinks by preventing HTML injection (#36829)
+- Improve ExternalTaskSensor Async Implementation (#36916)
+- Make Datasets ``Pathlike`` (#36947)
+- Simplify query for orphaned tasks (#36566)
+- Add deferrable param in FileSensor (#36840)
+- Run Trigger Page: Configurable number of recent configs (#36878)
+- Merge ``nowait`` and skip_locked into with_row_locks (#36889)
+- Return the specified field when get ``dag/dagRun`` in the REST API (#36641)
+- Only iterate over the items if debug is enabled for DagFileProcessorManager (#36761)
+- Add a fuzzy/regex pattern-matching for metric allow and block list (#36250)
+- Allow custom columns in cli dags list (#35250)
+- Make it possible to change the default cron timetable (#34851)
+- Some improvements to Airflow IO code (#36259)
+- Improve TaskInstance typing hints (#36487)
+- Remove dependency of ``Connexion`` from auth manager interface (#36209)
+- Refactor ExternalDagLink to not create ad hoc TaskInstances (#36135)
+
+Bug Fixes
+"""""""""
+- Load providers configuration when gunicorn workers start (#38795)
+- Fix grid header rendering (#38720)
+- Add a task instance dependency for mapped dependencies (#37498)
+- Improve stability of remove_task_decorator function (#38649)
+- Mark more fields on API as dump-only (#38616)
+- Fix ``total_entries`` count on the event logs endpoint (#38625)
+- Add padding to bottom of log block. (#38610)
+- Properly serialize nested attrs classes (#38591)
+- Fixing the ``tz`` in next run ID info (#38482)
+- Show abandoned tasks in Grid View (#38511)
+- Apply task instance mutation hook consistently (#38440)
+- Override ``chakra`` styles to keep ``dropdowns`` in filter bar (#38456)
+- Store duration in seconds and scale to handle case when a value in the series has a larger unit than the preceding durations. (#38374)
+- Don't allow defaults other than None in context parameters, and improve error message (#38015)
+- Make postgresql default engine args comply with SA 2.0 (#38362)
+- Add return statement to yield within a while loop in triggers (#38389)
+- Ensure ``__exit__`` is called in decorator context managers (#38383)
+- Make the method ``BaseAuthManager.is_authorized_custom_view`` abstract (#37915)
+- Add upper limit to planned calendar events calculation (#38310)
+- Fix Scheduler in daemon mode doesn't create PID at the specified location (#38117)
+- Properly serialize TaskInstancePydantic and DagRunPydantic (#37855)
+- Fix graph task state border color (#38084)
+- Add back methods removed in security manager (#37997)
+- Don't log "403" from worker serve-logs as "Unknown error". (#37933)
+- Fix execution data validation error in ``/get_logs_with_metadata`` endpoint (#37756)
+- Fix task duration selection (#37630)
+- Refrain from passing ``encoding`` to the SQL engine in SQLAlchemy v2 (#37545)
+- Fix 'implicitly coercing SELECT object to scalar subquery' in latest dag run statement (#37505)
+- Clean up typing with max_execution_date query builder (#36958)
+- Optimize max_execution_date query in single dag case (#33242)
+- Fix list dags command for get_dagmodel is None (#36739)
+- Load ``consuming_dags`` attr eagerly before dataset listener (#36247)
+
+Miscellaneous
+"""""""""""""
+- Remove display of param from the UI (#38660)
+- Update log level to debug from warning about scheduled_duration metric (#38180)
+- Use ``importlib_metadata`` with compat to Python 3.10/3.12 ``stdlib`` (#38366)
+- Refactored ``__new__`` magic method of BaseOperatorMeta to avoid bad mixing classic and decorated operators (#37937)
+- Use ``sys.version_info`` for determine Python Major.Minor (#38372)
+- Add missing deprecated Fab auth manager (#38376)
+- Remove unused loop variable from airflow package (#38308)
+- Adding max consecutive failed dag runs info in UI (#38229)
+- Bump minimum version of ``blinker`` add where it requires (#38140)
+- Bump follow-redirects from 1.15.4 to 1.15.6 in /airflow/www (#38156)
+- Bump Cryptography to ``> 39.0.0`` (#38112)
+- Add Python 3.12 support (#36755, #38025, #36595)
+- Avoid use of ``assert`` outside of the tests (#37718)
+- Update ObjectStoragePath for universal_pathlib>=v0.2.2 (#37930)
+- Resolve G004: Logging statement uses f-string (#37873)
+- Update build and install dependencies. (#37910)
+- Bump sanitize-html from 2.11.0 to 2.12.1 in /airflow/www (#37833)
+- Update to latest installer versions. (#37754)
+- Deprecate smtp configs in airflow settings / local_settings (#37711)
+- Deprecate PY* constants into the airflow module (#37575)
+- Remove usage of deprecated ``flask._request_ctx_stack`` (#37522)
+- Remove redundant ``login`` attribute in ``airflow.__init__.py`` (#37565)
+- Upgrade to FAB 4.3.11 (#37233)
+- Remove SCHEDULED_DEPS which is no longer used anywhere since 2.0.0 (#37140)
+- Replace ``datetime.datetime.utcnow`` by ``airflow.utils.timezone.utcnow`` in core (#35448)
+- Bump aiohttp min version to avoid CVE-2024-23829 and CVE-2024-23334 (#37110)
+- Move config related to FAB auth manager to FAB provider (#36232)
+- Remove MSSQL support form Airflow core (#36514)
+- Remove ``is_authorized_cluster_activity`` from auth manager (#36175)
+- Create FAB provider and move FAB auth manager in it (#35926)
+
+Doc Only Changes
+""""""""""""""""
+- Improve timetable documentation (#38505)
+- Reorder OpenAPI Spec tags alphabetically (#38717)
+- Update UI screenshots in the documentation (#38680, #38403, #38438, #38435)
+- Remove section as it's no longer true with dataset expressions PR (#38370)
+- Refactor DatasetOrTimeSchedule timetable docs (#37771)
+- Migrate executor docs to respective providers (#37728)
+- Add directive to render a list of URI schemes (#37700)
+- Add doc page with providers deprecations (#37075)
+- Add a cross reference to security policy (#37004)
+- Improve AIRFLOW__WEBSERVER__BASE_URL docs (#37003)
+- Update faq.rst with (hopefully) clearer description of start_date (#36846)
+- Update public interface doc re operators (#36767)
+- Add ``exception`` to templates ref list (#36656)
+- Add auth manager interface as public interface (#36312)
+- Reference fab provider documentation in Airflow documentation (#36310)
+- Create auth manager documentation (#36211)
+- Update permission docs (#36120)
+- Docstring improvement to _covers_every_hour (#36081)
+- Add note that task instance, dag and lifecycle listeners are non-experimental (#36376)
+
+
+Airflow 2.8.4 (2024-03-25)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+No significant changes.
+
+Bug Fixes
+"""""""""
+- Fix incorrect serialization of ``FixedTimezone`` (#38139)
+- Fix excessive permission changing for log task handler (#38164)
+- Fix task instances list link (#38096)
+- Fix a bug where scheduler heartrate parameter was not used (#37992)
+- Add padding to prevent grid horizontal scroll overlapping tasks (#37942)
+- Fix hash caching in ``ObjectStoragePath`` (#37769)
+
+Miscellaneous
+"""""""""""""
+- Limit importlib_resources as it breaks ``pytest_rewrites`` (#38095, #38139)
+- Limit ``pandas`` to ``<2.2`` (#37748)
+- Bump ``croniter`` to fix an issue with 29 Feb cron expressions (#38198)
+
+Doc Only Changes
+""""""""""""""""
+- Tell users what to do if their scanners find issues in the image (#37652)
+- Add a section about debugging in Docker Compose with PyCharm (#37940)
+- Update deferrable docs to clarify kwargs when trigger resumes operator (#38122)
+
+
+Airflow 2.8.3 (2024-03-11)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+The smtp provider is now pre-installed when you install Airflow. (#37713)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Bug Fixes
+"""""""""
+- Add "MENU" permission in auth manager (#37881)
+- Fix external_executor_id being overwritten (#37784)
+- Make more MappedOperator members modifiable (#37828)
+- Set parsing context dag_id in dag test command (#37606)
+
+Miscellaneous
+"""""""""""""
+- Remove useless methods from security manager (#37889)
+- Improve code coverage for TriggerRuleDep (#37680)
+- The SMTP provider is now preinstalled when installing Airflow (#37713)
+- Bump min versions of openapi validators (#37691)
+- Properly include ``airflow_pre_installed_providers.txt`` artifact (#37679)
+
+Doc Only Changes
+""""""""""""""""
+- Clarify lack of sync between workers and scheduler (#37913)
+- Simplify some docs around airflow_local_settings (#37835)
+- Add section about local settings configuration (#37829)
+- Fix docs of ``BranchDayOfWeekOperator`` (#37813)
+- Write to secrets store is not supported by design (#37814)
+- ``ERD`` generating doc improvement (#37808)
+- Update incorrect config value (#37706)
+- Update security model to clarify Connection Editing user's capabilities (#37688)
+- Fix ImportError on examples dags (#37571)
+
+
+Airflow 2.8.2 (2024-02-26)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+The ``allowed_deserialization_classes`` flag now follows a glob pattern (#36147).
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+For example if one wants to add the class ``airflow.tests.custom_class`` to the
+``allowed_deserialization_classes`` list, it can be done by writing the full class
+name (``airflow.tests.custom_class``) or a pattern such as the ones used in glob
+search (e.g., ``airflow.*``, ``airflow.tests.*``).
+
+If you currently use a custom regexp path make sure to rewrite it as a glob pattern.
+
+Alternatively, if you still wish to match it as a regexp pattern, add it under the new
+list ``allowed_deserialization_classes_regexp`` instead.
+
+The audit_logs permissions have been updated for heightened security (#37501).
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+This was done under the policy that we do not want users like Viewer, Ops,
+and other users apart from Admin to have access to audit_logs. The intention behind
+this change is to restrict users with less permissions from viewing user details
+like First Name, Email etc. from the audit_logs when they are not permitted to.
+
+The impact of this change is that the existing users with non admin rights won't be able
+to view or access the audit_logs, both from the Browse tab or from the DAG run.
+
+``AirflowTimeoutError`` is no longer ``except`` by default through ``Exception`` (#35653).
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+The ``AirflowTimeoutError`` is now inheriting ``BaseException`` instead of
+``AirflowException``->``Exception``.
+See https://docs.python.org/3/library/exceptions.html#exception-hierarchy
+
+This prevents code catching ``Exception`` from accidentally
+catching ``AirflowTimeoutError`` and continuing to run.
+``AirflowTimeoutError`` is an explicit intent to cancel the task, and should not
+be caught in attempts to handle the error and return some default value.
+
+Catching ``AirflowTimeoutError`` is still possible by explicitly ``except``ing
+``AirflowTimeoutError`` or ``BaseException``.
+This is discouraged, as it may allow the code to continue running even after
+such cancellation requests.
+Code that previously depended on performing strict cleanup in every situation
+after catching ``Exception`` is advised to use ``finally`` blocks or
+context managers. To perform only the cleanup and then automatically
+re-raise the exception.
+See similar considerations about catching ``KeyboardInterrupt`` in
+https://docs.python.org/3/library/exceptions.html#KeyboardInterrupt
+
+
+Bug Fixes
+"""""""""
+- Sort dag processing stats by last_runtime (#37302)
+- Allow pre-population of trigger form values via URL parameters (#37497)
+- Base date for fetching dag grid view must include selected run_id (#34887)
+- Check permissions for ImportError (#37468)
+- Move ``IMPORT_ERROR`` from DAG related permissions to view related permissions (#37292)
+- Change ``AirflowTaskTimeout`` to inherit ``BaseException`` (#35653)
+- Revert "Fix future DagRun rarely triggered by race conditions when max_active_runs reached its upper limit. (#31414)" (#37596)
+- Change margin to padding so first task can be selected (#37527)
+- Fix Airflow serialization for ``namedtuple`` (#37168)
+- Fix bug with clicking url-unsafe tags (#37395)
+- Set deterministic and new getter for ``Treeview`` function (#37162)
+- Fix permissions of parent folders for log file handler (#37310)
+- Fix permission check on DAGs when ``access_entity`` is specified (#37290)
+- Fix the value of ``dateTimeAttrFormat`` constant (#37285)
+- Resolve handler close race condition at triggerer shutdown (#37206)
+- Fixing status icon alignment for various views (#36804)
+- Remove superfluous ``@Sentry.enrich_errors``  (#37002)
+- Use execution_date= param as a backup to base date for grid view (#37018)
+- Handle SystemExit raised in the task. (#36986)
+- Revoking audit_log permission from all users except admin (#37501)
+- Fix broken regex for allowed_deserialization_classes (#36147)
+- Fix the bug that affected the DAG end date. (#36144)
+- Adjust node width based on task name length (#37254)
+- fix: PythonVirtualenvOperator crashes if any python_callable function is defined in the same source as DAG (#37165)
+- Fix collapsed grid width, line up selected bar with gantt (#37205)
+- Adjust graph node layout (#37207)
+- Revert the sequence of initializing configuration defaults (#37155)
+- Displaying "actual" try number in TaskInstance view (#34635)
+- Bugfix Triggering DAG with parameters is mandatory when show_trigger_form_if_no_params is enabled (#37063)
+- Secret masker ignores passwords with special chars (#36692)
+- Fix DagRuns with UPSTREAM_FAILED tasks get stuck in the backfill. (#36954)
+- Disable ``dryrun`` auto-fetch (#36941)
+- Fix copy button on a DAG run's config (#36855)
+- Fix bug introduced by replacing spaces by + in run_id (#36877)
+- Fix webserver always redirecting to home page if user was not logged in (#36833)
+- REST API set description on POST to ``/variables`` endpoint (#36820)
+- Sanitize the conn_id to disallow potential script execution (#32867)
+- Fix task id copy button copying wrong id (#34904)
+- Fix security manager inheritance in fab provider (#36538)
+- Avoid ``pendulum.from_timestamp`` usage (#37160)
+
+Miscellaneous
+"""""""""""""
+- Install latest docker ``CLI`` instead of specific one (#37651)
+- Bump ``undici`` from ``5.26.3`` to ``5.28.3`` in ``/airflow/www`` (#37493)
+- Add Python ``3.12`` exclusions in ``providers/pyproject.toml`` (#37404)
+- Remove ``markdown`` from core dependencies (#37396)
+- Remove unused ``pageSize`` method. (#37319)
+- Add more-itertools as dependency of common-sql (#37359)
+- Replace other ``Python 3.11`` and ``3.12`` deprecations (#37478)
+- Include ``airflow_pre_installed_providers.txt`` into ``sdist`` distribution (#37388)
+- Turn Pydantic into an optional dependency (#37320)
+- Limit ``universal-pathlib to < 0.2.0`` (#37311)
+- Allow running airflow against sqlite in-memory DB for tests (#37144)
+- Add description to ``queue_when`` (#36997)
+- Updated ``config.yml`` for environment variable ``sql_alchemy_connect_args``  (#36526)
+- Bump min version of ``Alembic to 1.13.1`` (#36928)
+- Limit ``flask-session`` to ``<0.6`` (#36895)
+
+Doc Only Changes
+""""""""""""""""
+- Fix upgrade docs to reflect true ``CLI`` flags available (#37231)
+- Fix a bug in fundamentals doc (#37440)
+- Add redirect for deprecated page (#37384)
+- Fix the ``otel`` config descriptions (#37229)
+- Update ``Objectstore`` tutorial with ``prereqs`` section (#36983)
+- Add more precise description on avoiding generic ``package/module`` names (#36927)
+- Add airflow version substitution into Docker Compose Howto (#37177)
+- Add clarification about DAG author capabilities to security model (#37141)
+- Move docs for cron basics to Authoring and Scheduling section (#37049)
+- Link to release notes in the upgrade docs (#36923)
+- Prevent templated field logic checks in ``__init__`` of operators automatically (#33786)
+
+
+Airflow 2.8.1 (2024-01-19)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+Target version for core dependency ``pendulum`` package set to 3 (#36281).
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Support for pendulum 2.1.2 will be saved for a while, presumably until the next feature version of Airflow.
+It is advised to upgrade user code to use pendulum 3 as soon as possible.
+
+Pendulum 3 introduced some subtle incompatibilities that you might rely on in your code - for example
+default rendering of dates is missing ``T`` in the rendered date representation, which is not ISO8601
+compliant. If you rely on the default rendering of dates, you might need to adjust your code to use
+``isoformat()`` method to render dates in ISO8601 format.
+
+Airflow packaging specification follows modern Python packaging standards (#36537).
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+We standardized Airflow dependency configuration to follow latest development in Python packaging by
+using ``pyproject.toml``. Airflow is now compliant with those accepted PEPs:
+
+* `PEP-440 Version Identification and Dependency Specification <https://www.python.org/dev/peps/pep-0440/>`__
+* `PEP-517 A build-system independent format for source trees <https://www.python.org/dev/peps/pep-0517/>`__
+* `PEP-518 Specifying Minimum Build System Requirements for Python Projects <https://www.python.org/dev/peps/pep-0518/>`__
+* `PEP-561 Distributing and Packaging Type Information <https://www.python.org/dev/peps/pep-0561/>`__
+* `PEP-621 Storing project metadata in pyproject.toml <https://www.python.org/dev/peps/pep-0621/>`__
+* `PEP-660 Editable installs for pyproject.toml based builds (wheel based) <https://www.python.org/dev/peps/pep-0660/>`__
+* `PEP-685 Comparison of extra names for optional distribution dependencies <https://www.python.org/dev/peps/pep-0685/>`__
+
+Also we implement multiple license files support coming from Draft, not yet accepted (but supported by hatchling) PEP:
+* `PEP 639 Improving License Clarity with Better Package Metadata <https://peps.python.org/pep-0639/>`__
+
+This has almost no noticeable impact on users if they are using modern Python packaging and development tools, generally
+speaking Airflow should behave as it did before when installing it from PyPI and it should be much easier to install
+it for development purposes using ``pip install -e ".[devel]"``.
+
+The differences from the user side are:
+
+* Airflow extras now get extras normalized to ``-`` (following PEP-685) instead of ``_`` and ``.``
+  (as it was before in some extras). When you install airflow with such extras (for example ``dbt.core`` or
+  ``all_dbs``) you should use ``-`` instead of ``_`` and ``.``.
+
+In most modern tools this will work in backwards-compatible way, but in some old version of those tools you might need to
+replace ``_`` and ``.`` with ``-``. You can also get warnings that the extra you are installing does not exist - but usually
+this warning is harmless and the extra is installed anyway. It is, however, recommended to change to use ``-`` in extras in your dependency
+specifications for all Airflow extras.
+
+* Released airflow package does not contain ``devel``, ``devel-*``, ``doc`` and ``doc-gen`` extras.
+  Those extras are only available when you install Airflow from sources in ``--editable`` mode. This is
+  because those extras are only used for development and documentation building purposes and are not needed
+  when you install Airflow for production use. Those dependencies had unspecified and varying behaviour for
+  released packages anyway and you were not supposed to use them in released packages.
+
+* The ``all`` and ``all-*`` extras were not always working correctly when installing Airflow using constraints
+  because they were also considered as development-only dependencies. With this change, those dependencies are
+  now properly handling constraints and they will install properly with constraints, pulling the right set
+  of providers and dependencies when constraints are used.
+
+Graphviz dependency is now an optional one, not required one (#36647).
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+The ``graphviz`` dependency has been problematic as Airflow required dependency - especially for
+ARM-based installations. Graphviz packages require binary graphviz libraries - which is already a
+limitation, but they also require to install graphviz Python bindings to be build and installed.
+This does not work for older Linux installation but - more importantly - when you try to install
+Graphviz libraries for Python 3.8, 3.9 for ARM M1 MacBooks, the packages fail to install because
+Python bindings compilation for M1 can only work for Python 3.10+.
+
+This is not a breaking change technically - the CLIs to render the DAGs is still there and IF you
+already have graphviz installed, it will continue working as it did before. The only problem when it
+does not work is where you do not have graphviz installed it will raise an error and inform that you need it.
+
+Graphviz will remain to be installed for most users:
+
+* the Airflow Image will still contain graphviz library, because
+  it is added there as extra
+* when previous version of Airflow has been installed already, then
+  graphviz library is already installed there and Airflow will
+  continue working as it did
+
+The only change will be a new installation of new version of Airflow from the scratch, where graphviz will
+need to be specified as extra or installed separately in order to enable DAG rendering option.
+
+Bug Fixes
+"""""""""
+- Fix airflow-scheduler exiting with code 0 on exceptions (#36800)
+- Fix Callback exception when a removed task is the last one in the ``taskinstance`` list (#36693)
+- Allow anonymous user edit/show resource when set ``AUTH_ROLE_PUBLIC=admin`` (#36750)
+- Better error message when sqlite URL uses relative path (#36774)
+- Explicit string cast required to force integer-type run_ids to be passed as strings instead of integers (#36756)
+- Add log lookup exception for empty ``op`` subtypes (#35536)
+- Remove unused index on task instance (#36737)
+- Fix check on subclass for ``typing.Union`` in ``_infer_multiple_outputs`` for Python 3.10+ (#36728)
+- Make sure ``multiple_outputs`` is inferred correctly even when using ``TypedDict`` (#36652)
+- Add back FAB constant in legacy security manager (#36719)
+- Fix AttributeError when using ``Dagrun.update_state`` (#36712)
+- Do not let ``EventsTimetable`` schedule past events if ``catchup=False`` (#36134)
+- Support encryption for triggers parameters (#36492)
+- Fix the type hint for ``tis_query`` in ``_process_executor_events`` (#36655)
+- Redirect to index when user does not have permission to access a page (#36623)
+- Avoid using dict as default value in ``call_regular_interval`` (#36608)
+- Remove option to set a task instance to running state in UI (#36518)
+- Fix details tab not showing when using dynamic task mapping (#36522)
+- Raise error when ``DagRun`` fails while running ``dag test`` (#36517)
+- Refactor ``_manage_executor_state`` by refreshing TIs in batch (#36502)
+- Add flask config: ``MAX_CONTENT_LENGTH`` (#36401)
+- Fix get_leaves calculation for teardown in nested group (#36456)
+- Stop serializing timezone-naive datetime to timezone-aware datetime with UTC tz (#36379)
+- Make ``kubernetes`` decorator type annotation consistent with operator (#36405)
+- Fix Webserver returning 500 for POST requests to ``api/dag/*/dagrun`` from anonymous user (#36275)
+- Fix the required access for get_variable endpoint (#36396)
+- Fix datetime reference in ``DAG.is_fixed_time_schedule`` (#36370)
+- Fix AirflowSkipException message raised by BashOperator (#36354)
+- Allow PythonVirtualenvOperator.skip_on_exit_code to be zero (#36361)
+- Increase width of execution_date input in trigger.html (#36278)
+- Fix logging for pausing DAG (#36182)
+- Stop deserializing pickle when enable_xcom_pickling is False (#36255)
+- Check DAG read permission before accessing DAG code (#36257)
+- Enable mark task as failed/success always (#36254)
+- Create latest log dir symlink as relative link (#36019)
+- Fix Python-based decorators templating (#36103)
+
+Miscellaneous
+"""""""""""""
+- Rename concurrency label to max active tasks (#36691)
+- Restore function scoped ``httpx`` import in file_task_handler for performance (#36753)
+- Add support of Pendulum 3 (#36281)
+- Standardize airflow build process and switch to Hatchling build backend (#36537)
+- Get rid of ``pyarrow-hotfix`` for ``CVE-2023-47248`` (#36697)
+- Make ``graphviz`` dependency optional (#36647)
+- Announce MSSQL support end in Airflow 2.9.0, add migration script hints (#36509)
+- Set min ``pandas`` dependency to 1.2.5 for all providers and airflow (#36698)
+- Bump follow-redirects from 1.15.3 to 1.15.4 in ``/airflow/www`` (#36700)
+- Provide the logger_name param to base hook in order to override the logger name (#36674)
+- Fix run type icon alignment with run type text (#36616)
+- Follow BaseHook connection fields method signature in FSHook (#36444)
+- Remove redundant ``docker`` decorator type annotations (#36406)
+- Straighten typing in workday timetable (#36296)
+- Use ``batch_is_authorized_dag`` to check if user has permission to read DAGs (#36279)
+- Replace deprecated get_accessible_dag_ids and use get_readable_dags in get_dag_warnings (#36256)
+
+Doc Only Changes
+""""""""""""""""
+- Metrics tagging documentation (#36627)
+- In docs use logical_date instead of deprecated execution_date (#36654)
+- Add section about live-upgrading Airflow (#36637)
+- Replace ``numpy`` example with practical exercise demonstrating top-level code (#35097)
+- Improve and add more complete description in the architecture diagrams (#36513)
+- Improve the error message displayed when there is a webserver error (#36570)
+- Update ``dags.rst`` with information on DAG pausing (#36540)
+- Update installation prerequisites after upgrading to Debian Bookworm (#36521)
+- Add description on the ways how users should approach DB monitoring (#36483)
+- Add branching based on mapped task group example to dynamic-task-mapping.rst (#36480)
+- Add further details to replacement documentation (#36485)
+- Use cards when describing priority weighting methods (#36411)
+- Update ``metrics.rst`` for param ``dagrun.schedule_delay`` (#36404)
+- Update admonitions in Python operator doc to reflect sentiment (#36340)
+- Improve audit_logs.rst (#36213)
+- Remove Redshift mention from the list of managed Postgres backends (#36217)
+
+Airflow 2.8.0 (2023-12-18)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+Raw HTML code in DAG docs and DAG params descriptions is disabled by default (#35460)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+To ensure that no malicious javascript can be injected with DAG descriptions or trigger UI forms by DAG authors
+a new parameter ``webserver.allow_raw_html_descriptions`` was added with default value of ``False``.
+If you trust your DAG authors code and want to allow using raw HTML in DAG descriptions and params, you can restore the previous
+behavior by setting the configuration value to ``True``.
+
+To ensure Airflow is secure by default, the raw HTML support in trigger UI has been super-seeded by markdown support via
+the ``description_md`` attribute. If you have been using ``description_html`` please migrate to ``description_md``.
+The ``custom_html_form`` is now deprecated.
+
+New Features
+""""""""""""
+- AIP-58: Add Airflow ObjectStore (AFS) (`AIP-58 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3AAIP-58+milestone%3A%22Airflow+2.8.0%22>`_)
+- Add XCom tab to Grid (#35719)
+- Add "literal" wrapper to disable field templating (#35017)
+- Add task context logging feature to allow forwarding messages to task logs (#32646, #32693, #35857)
+- Add Listener hooks for Datasets (#34418, #36247)
+- Allow override of navbar text color (#35505)
+- Add lightweight serialization for deltalake tables (#35462)
+- Add support for serialization of iceberg tables (#35456)
+- ``prev_end_date_success`` method access (#34528)
+- Add task parameter to set custom logger name (#34964)
+- Add pyspark decorator (#35247)
+- Add trigger as a valid option for the db clean command (#34908)
+- Add decorators for external and venv python branching operators (#35043)
+- Allow PythonVenvOperator using other index url (#33017)
+- Add Python Virtualenv Operator Caching (#33355)
+- Introduce a generic export for containerized executor logging (#34903)
+- Add ability to clear downstream tis in ``List Task Instances`` view  (#34529)
+- Attribute ``clear_number`` to track DAG run being cleared (#34126)
+- Add BranchPythonVirtualenvOperator (#33356)
+- Allow PythonVenvOperator using other index url (#33017)
+- Add CLI notification commands to providers (#33116)
+- Use dropdown instead of buttons when there are more than 10 retries in log tab (#36025)
+
+Improvements
+""""""""""""
+- Add ``multiselect`` to run state in grid view (#35403)
+- Fix warning message in ``Connection.get_hook`` in case of ImportError (#36005)
+- Add processor_subdir to import_error table to handle multiple dag processors (#35956)
+- Consolidate the call of change_state to fail or success in the core executors (#35901)
+- Relax mandatory requirement for start_date when schedule=None (#35356)
+- Use ExitStack to manage mutation of secrets_backend_list in dag.test (#34620)
+- improved visibility of tasks in ActionModal for ``taskinstance`` (#35810)
+- Create directories based on ``AIRFLOW_CONFIG`` path (#35818)
+- Implements ``JSON-string`` connection representation generator (#35723)
+- Move ``BaseOperatorLink`` into the separate module (#35032)
+- Set mark_end_on_close after set_context (#35761)
+- Move external logs links to top of react logs page (#35668)
+- Change terminal mode to ``cbreak`` in ``execute_interactive`` and handle ``SIGINT`` (#35602)
+- Make raw HTML descriptions configurable (#35460)
+- Allow email field to be templated (#35546)
+- Hide logical date and run id in trigger UI form (#35284)
+- Improved instructions for adding dependencies in TaskFlow (#35406)
+- Add optional exit code to list import errors (#35378)
+- Limit query result on DB rather than client in ``synchronize_log_template`` function (#35366)
+- Allow description to be passed in when using variables CLI (#34791)
+- Allow optional defaults in required fields with manual triggered dags (#31301)
+- Permitting airflow kerberos to run in different modes (#35146)
+- Refactor commands to unify daemon context handling (#34945)
+- Add extra fields to plugins endpoint (#34913)
+- Add description to pools view (#34862)
+- Move cli's Connection export and Variable export command print logic to a separate function (#34647)
+- Extract and reuse get_kerberos_principle func from get_kerberos_principle (#34936)
+- Change type annotation for ``BaseOperatorLink.operators`` (#35003)
+- Optimise and migrate to ``SA2-compatible`` syntax for TaskReschedule (#33720)
+- Consolidate the permissions name in SlaMissModelView (#34949)
+- Add debug log saying what's being run to ``EventScheduler`` (#34808)
+- Increase log reader stream loop sleep duration to 1 second (#34789)
+- Resolve pydantic deprecation warnings re ``update_forward_refs`` (#34657)
+- Unify mapped task group lookup logic (#34637)
+- Allow filtering event logs by attributes (#34417)
+- Make connection login and password TEXT (#32815)
+- Ban import ``Dataset`` from ``airflow`` package in codebase (#34610)
+- Use ``airflow.datasets.Dataset`` in examples and tests (#34605)
+- Enhance task status visibility (#34486)
+- Simplify DAG trigger UI (#34567)
+- Ban import AirflowException from airflow (#34512)
+- Add descriptions for airflow resource config parameters (#34438)
+- Simplify trigger name expression (#34356)
+- Move definition of Pod*Exceptions to pod_generator (#34346)
+- Add deferred tasks to the cluster_activity view Pools Slots (#34275)
+- heartbeat failure log message fix (#34160)
+- Rename variables for dag runs (#34049)
+- Clarify new_state in OpenAPI spec (#34056)
+- Remove ``version`` top-level element from docker compose files (#33831)
+- Remove generic trigger cancelled error log (#33874)
+- Use ``NOT EXISTS`` subquery instead of ``tuple_not_in_condition`` (#33527)
+- Allow context key args to not provide a default (#33430)
+- Order triggers by - TI priority_weight when assign unassigned triggers (#32318)
+- Add metric ``triggerer_heartbeat`` (#33320)
+- Allow ``airflow variables export`` to print to stdout (#33279)
+- Workaround failing deadlock when running backfill (#32991)
+- add dag_run_ids and task_ids filter for the batch task instance API endpoint (#32705)
+- Configurable health check threshold for triggerer (#33089)
+- Rework provider manager to treat Airflow core hooks like other provider hooks (#33051)
+- Ensure DAG-level references are filled on unmap (#33083)
+- Affix webserver access_denied warning to be configurable (#33022)
+- Add support for arrays of different data types in the Trigger Form UI (#32734)
+- Add a mechanism to warn if executors override existing CLI commands (#33423)
+
+Bug Fixes
+"""""""""
+- Account for change in UTC offset when calculating next schedule (#35887)
+- Add read access to pools for viewer role (#35352)
+- Fix gantt chart queued duration when queued_dttm is greater than start_date for deferred tasks (#35984)
+- Avoid crushing container when directory is not found on rm (#36050)
+- Update ``reset_user_sessions`` to work from either CLI or web (#36056)
+- Fix UI Grid error when DAG has been removed. (#36028)
+- Change Trigger UI to use HTTP POST in web ui (#36026)
+- Fix airflow db shell needing an extra key press to exit (#35982)
+- Change dag grid ``overscroll`` behaviour to auto (#35717)
+- Run triggers inline with dag test (#34642)
+- Add ``borderWidthRight`` to grid for Firefox ``scrollbar`` (#35346)
+- Fix for infinite recursion due to secrets_masker (#35048)
+- Fix write ``processor_subdir`` in serialized_dag table (#35661)
+- Reload configuration for standalone dag file processor (#35725)
+- Long custom operator name overflows in graph view (#35382)
+- Add try_number to extra links query (#35317)
+- Prevent assignment of non JSON serializable values to DagRun.conf dict (#35096)
+- Numeric values in DAG details are incorrectly rendered as timestamps (#35538)
+- Fix Scheduler and triggerer crashes in daemon mode when statsd metrics are enabled (#35181)
+- Infinite UI redirection loop after deactivating an active user (#35486)
+- Bug fix fetch_callback of Partial Subset DAG (#35256)
+- Fix DagRun data interval for DeltaDataIntervalTimetable (#35391)
+- Fix query in ``get_dag_by_pickle`` util function (#35339)
+- Fix TriggerDagRunOperator failing to trigger subsequent runs when reset_dag_run=True (#35429)
+- Fix weight_rule property type in ``mappedoperator`` (#35257)
+- Bugfix/prevent concurrency with cached venv (#35258)
+- Fix dag serialization (#34042)
+- Fix py/url-redirection by replacing request.referrer by get_redirect() (#34237)
+- Fix updating variables during variable imports (#33932)
+- Use Literal from airflow.typing_compat in Airflow core (#33821)
+- Always use ``Literal`` from ``typing_extensions`` (#33794)
+
+Miscellaneous
+"""""""""""""
+- Change default MySQL client to MariaDB (#36243)
+- Mark daskexecutor provider as removed (#35965)
+- Bump FAB to ``4.3.10`` (#35991)
+- Mark daskexecutor provider as removed (#35965)
+- Rename ``Connection.to_json_dict`` to ``Connection.to_dict`` (#35894)
+- Upgrade to Pydantic v2 (#35551)
+- Bump ``moto`` version to ``>= 4.2.9`` (#35687)
+- Use ``pyarrow-hotfix`` to mitigate CVE-2023-47248 (#35650)
+- Bump ``axios`` from ``0.26.0 to 1.6.0`` in ``/airflow/www/`` (#35624)
+- Make docker decorator's type annotation consistent with operator (#35568)
+- Add default to ``navbar_text_color`` and ``rm`` condition in style (#35553)
+- Avoid initiating session twice in ``dag_next_execution`` (#35539)
+- Work around typing issue in examples and providers (#35494)
+- Enable ``TCH004`` and ``TCH005`` rules (#35475)
+- Humanize log output about retrieved DAG(s) (#35338)
+- Switch from Black to Ruff formatter (#35287)
+- Upgrade to Flask Application Builder 4.3.9 (#35085)
+- D401 Support (#34932, #34933)
+- Use requires_access to check read permission on dag instead of checking it explicitly (#34940)
+- Deprecate lazy import ``AirflowException`` from airflow (#34541)
+- View util refactoring on mapped stuff use cases (#34638)
+- Bump ``postcss`` from ``8.4.25 to 8.4.31`` in ``/airflow/www`` (#34770)
+- Refactor Sqlalchemy queries to 2.0 style (#34763, #34665, #32883, #35120)
+- Change to lazy loading of io in pandas serializer (#34684)
+- Use ``airflow.models.dag.DAG`` in examples (#34617)
+- Use airflow.exceptions.AirflowException in core (#34510)
+- Check that dag_ids passed in request are consistent (#34366)
+- Refactors to make code better (#34278, #34113, #34110, #33838, #34260, #34409, #34377, #34350)
+- Suspend qubole provider (#33889)
+- Generate Python API docs for Google ADS (#33814)
+- Improve importing in modules (#33812, #33811, #33810, #33806, #33807, #33805, #33804, #33803,
+  #33801, #33799, #33800, #33797, #33798, #34406, #33808)
+- Upgrade Elasticsearch to 8 (#33135)
+
+Doc Only Changes
+""""""""""""""""
+- Add support for tabs (and other UX components) to docs (#36041)
+- Replace architecture diagram of Airflow with diagrams-generated one (#36035)
+- Add the section describing the security model of DAG Author capabilities (#36022)
+- Enhance docs for zombie tasks (#35825)
+- Reflect drop/add support of DB Backends versions in documentation (#35785)
+- More detail on mandatory task arguments (#35740)
+- Indicate usage of the ``re2`` regex engine in the .airflowignore documentation. (#35663)
+- Update ``best-practices.rst`` (#35692)
+- Update ``dag-run.rst`` to mention Airflow's support for extended cron syntax through croniter (#35342)
+- Update ``webserver.rst`` to include information of supported OAuth2 providers (#35237)
+- Add back dag_run to docs (#35142)
+- Fix ``rst`` code block format (#34708)
+- Add typing to concrete taskflow examples (#33417)
+- Add concrete examples for accessing context variables from TaskFlow tasks (#33296)
+- Fix links in security docs (#33329)
+
+
+Airflow 2.7.3 (2023-11-06)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+No significant changes.
+
+Bug Fixes
+"""""""""
+- Fix pre-mature evaluation of tasks in mapped task group (#34337)
+- Add TriggerRule missing value in rest API (#35194)
+- Fix Scheduler crash looping when dagrun creation fails (#35135)
+- Fix test connection with ``codemirror`` and extra (#35122)
+- Fix usage of cron-descriptor since BC in v1.3.0 (#34836)
+- Fix ``get_plugin_info`` for class based listeners. (#35022)
+- Some improvements/fixes for dag_run and task_instance endpoints (#34942)
+- Fix the dags count filter in webserver home page (#34944)
+- Return only the TIs of the readable dags when ~ is provided as a dag_id (#34939)
+- Fix triggerer thread crash in daemon mode (#34931)
+- Fix wrong plugin schema (#34858)
+- Use DAG timezone in TimeSensorAsync (#33406)
+- Mark tasks with ``all_skipped`` trigger rule as ``skipped`` if any task is in ``upstream_failed`` state (#34392)
+- Add read only validation to read only fields (#33413)
+
+Misc/Internal
+"""""""""""""
+- Improve testing harness to separate DB and non-DB tests (#35160, #35333)
+- Add pytest db_test markers to our tests (#35264)
+- Add pip caching for faster build (#35026)
+- Upper bound ``pendulum`` requirement to ``<3.0`` (#35336)
+- Limit ``sentry_sdk`` to ``1.33.0`` (#35298)
+- Fix subtle bug in mocking processor_agent in our tests (#35221)
+- Bump ``@babel/traverse`` from ``7.16.0 to 7.23.2`` in ``/airflow/www`` (#34988)
+- Bump ``undici`` from ``5.19.1 to 5.26.3`` in ``/airflow/www`` (#34971)
+- Remove unused set from ``SchedulerJobRunner`` (#34810)
+- Remove warning about ``max_tis per query > parallelism`` (#34742)
+- Improve modules import in Airflow core by moving some of them into a type-checking block (#33755)
+- Fix tests to respond to Python 3.12 handling of utcnow in sentry-sdk (#34946)
+- Add ``connexion<3.0`` upper bound (#35218)
+- Limit Airflow to ``< 3.12`` (#35123)
+- update moto version (#34938)
+- Limit WTForms to below ``3.1.0`` (#34943)
+
+Doc Only Changes
+""""""""""""""""
+- Fix variables substitution in Airflow Documentation (#34462)
+- Added example for defaults in ``conn.extras`` (#35165)
+- Update datasets.rst issue with running example code (#35035)
+- Remove ``mysql-connector-python`` from recommended MySQL driver (#34287)
+- Fix syntax error in task dependency ``set_downstream`` example (#35075)
+- Update documentation to enable test connection (#34905)
+- Update docs errors.rst - Mention sentry "transport" configuration option (#34912)
+- Update dags.rst to put SubDag deprecation note right after the SubDag section heading (#34925)
+- Add info on getting variables and config in custom secrets backend (#34834)
+- Document BaseExecutor interface in more detail to help users in writing custom executors (#34324)
+- Fix broken link to ``airflow_local_settings.py`` template (#34826)
+- Fixes python_callable function assignment context kwargs example in params.rst (#34759)
+- Add missing multiple_outputs=True param in the TaskFlow example (#34812)
+- Remove extraneous ``'>'`` in provider section name (#34813)
+- Fix imports in extra link documentation (#34547)
+
+
+
+Airflow 2.7.2 (2023-10-12)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+No significant changes
+
+
+Bug Fixes
+"""""""""
+- Check if the lower of provided values are sensitives in config endpoint (#34712)
+- Add support for ZoneInfo and generic UTC to fix datetime serialization (#34683, #34804)
+- Fix AttributeError: 'Select' object has no attribute 'count' during the airflow db migrate command (#34348)
+- Make dry run optional for patch task instance  (#34568)
+- Fix non deterministic datetime deserialization (#34492)
+- Use iterative loop to look for mapped parent (#34622)
+- Fix is_parent_mapped value by checking if any of the parent ``taskgroup`` is mapped (#34587)
+- Avoid top-level airflow import to avoid circular dependency (#34586)
+- Add more exemptions to lengthy metric list (#34531)
+- Fix dag warning endpoint permissions (#34355)
+- Fix task instance access issue in the batch endpoint (#34315)
+- Correcting wrong time showing in grid view (#34179)
+- Fix www ``cluster_activity`` view not loading due to ``standaloneDagProcessor`` templating (#34274)
+- Set ``loglevel=DEBUG`` in 'Not syncing ``DAG-level`` permissions' (#34268)
+- Make param validation consistent for DAG validation and triggering (#34248)
+- Ensure details panel is shown when any tab is selected (#34136)
+- Fix issues related to ``access_control={}`` (#34114)
+- Fix not found ``ab_user`` table in the CLI session (#34120)
+- Fix FAB-related logging format interpolation (#34139)
+- Fix query bug in ``next_run_datasets_summary`` endpoint (#34143)
+- Fix for TaskGroup toggles for duplicated labels (#34072)
+- Fix the required permissions to clear a TI from the UI (#34123)
+- Reuse ``_run_task_session`` in mapped ``render_template_fields`` (#33309)
+- Fix scheduler logic to plan new dag runs by ignoring manual runs (#34027)
+- Add missing audit logs for Flask actions add, edit and delete (#34090)
+- Hide Irrelevant Dag Processor from Cluster Activity Page (#33611)
+- Remove infinite animation for pinwheel, spin for 1.5s (#34020)
+- Restore rendering of provider configuration with ``version_added`` (#34011)
+
+Doc Only Changes
+""""""""""""""""
+- Clarify audit log permissions (#34815)
+- Add explanation for Audit log users (#34814)
+- Import ``AUTH_REMOTE_USER`` from FAB in WSGI middleware example (#34721)
+- Add information about drop support MsSQL as DB Backend in the future (#34375)
+- Document how to use the system's timezone database (#34667)
+- Clarify what landing time means in doc (#34608)
+- Fix screenshot in dynamic task mapping docs (#34566)
+- Fix class reference in Public Interface documentation (#34454)
+- Clarify var.value.get  and var.json.get usage (#34411)
+- Schedule default value description (#34291)
+- Docs for triggered_dataset_event (#34410)
+- Add DagRun events (#34328)
+- Provide tabular overview about trigger form param types (#34285)
+- Add link to Amazon Provider Configuration in Core documentation (#34305)
+- Add "security infrastructure" paragraph to security model (#34301)
+- Change links to SQLAlchemy 1.4 (#34288)
+- Add SBOM entry in security documentation (#34261)
+- Added more example code for XCom push and pull (#34016)
+- Add state utils to Public Airflow Interface (#34059)
+- Replace markdown style link with rst style link (#33990)
+- Fix broken link to the "UPDATING.md" file (#33583)
+
+Misc/Internal
+"""""""""""""
+- Update min-sqlalchemy version to account for latest features used (#34293)
+- Fix SesssionExemptMixin spelling (#34696)
+- Restrict ``astroid`` version < 3 (#34658)
+- Fail dag test if defer without triggerer (#34619)
+- Fix connections exported output (#34640)
+- Don't run isort when creating new alembic migrations (#34636)
+- Deprecate numeric type python version in PythonVirtualEnvOperator (#34359)
+- Refactor ``os.path.splitext`` to ``Path.*`` (#34352, #33669)
+- Replace = by is for type comparison (#33983)
+- Refactor integer division (#34180)
+- Refactor: Simplify comparisons (#34181)
+- Refactor: Simplify string generation (#34118)
+- Replace unnecessary dict comprehension with dict() in core (#33858)
+- Change "not all" to "any" for ease of readability (#34259)
+- Replace assert by if...raise in code (#34250, #34249)
+- Move default timezone to except block (#34245)
+- Combine similar if logic in core (#33988)
+- Refactor: Consolidate import and usage of random (#34108)
+- Consolidate importing of os.path.* (#34060)
+- Replace sequence concatenation by unpacking in Airflow core (#33934)
+- Refactor unneeded 'continue' jumps around the repo (#33849, #33845, #33846, #33848, #33839, #33844, #33836, #33842)
+- Remove [project] section from ``pyproject.toml`` (#34014)
+- Move the try outside the loop when this is possible in Airflow core (#33975)
+- Replace loop by any when looking for a positive value in core (#33985)
+- Do not create lists we don't need (#33519)
+- Remove useless string join from core (#33969)
+- Add TCH001 and TCH002 rules to pre-commit to detect and move type checking modules (#33865)
+- Add cancel_trigger_ids to to_cancel dequeue in batch (#33944)
+- Avoid creating unnecessary list when parsing stats datadog tags (#33943)
+- Replace dict.items by dict.values when key is not used in core (#33940)
+- Replace lambdas with comprehensions (#33745)
+- Improve modules import in Airflow core by some of them into a type-checking block (#33755)
+- Refactor: remove unused state - SHUTDOWN (#33746, #34063, #33893)
+- Refactor: Use in-place .sort() (#33743)
+- Use literal dict instead of calling dict() in Airflow core (#33762)
+- remove unnecessary map and rewrite it using list in Airflow core (#33764)
+- Replace lambda by a def method in Airflow core (#33758)
+- Replace type func by ``isinstance`` in fab_security manager (#33760)
+- Replace single quotes by double quotes in all Airflow modules (#33766)
+- Merge multiple ``isinstance`` calls for the same object in a single call (#33767)
+- Use a single  statement with multiple contexts instead of nested  statements in core (#33769)
+- Refactor: Use f-strings (#33734, #33455)
+- Refactor: Use random.choices (#33631)
+- Use ``str.splitlines()`` to split lines (#33592)
+- Refactor: Remove useless str() calls (#33629)
+- Refactor: Improve detection of duplicates and list sorting (#33675)
+- Simplify conditions on ``len()`` (#33454)
+
+
+Airflow 2.7.1 (2023-09-07)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+CronTriggerTimetable is now less aggressive when trying to skip a run (#33404)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+When setting ``catchup=False``, CronTriggerTimetable no longer skips a run if
+the scheduler does not query the timetable immediately after the previous run
+has been triggered.
+
+This should not affect scheduling in most cases, but can change the behaviour if
+a DAG is paused-unpaused to manually skip a run. Previously, the timetable (with
+``catchup=False``) would only start a run after a DAG is unpaused, but with this
+change, the scheduler would try to look at little bit back to schedule the
+previous run that covers a part of the period when the DAG was paused. This
+means you will need to keep a DAG paused longer (namely, for the entire cron
+period to pass) to really skip a run.
+
+Note that this is also the behaviour exhibited by various other cron-based
+scheduling tools, such as ``anacron``.
+
+``conf.set()`` becomes case insensitive to match ``conf.get()`` behavior (#33452)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+Also, ``conf.get()`` will now break if used with non-string parameters.
+
+``conf.set(section, key, value)`` used to be case sensitive, i.e. ``conf.set("SECTION", "KEY", value)``
+and ``conf.set("section", "key", value)`` were stored as two distinct configurations.
+This was inconsistent with the behavior of ``conf.get(section, key)``, which was always converting the section and key to lower case.
+
+As a result, configuration options set with upper case characters in the section or key were unreachable.
+That's why we are now converting section and key to lower case in ``conf.set`` too.
+
+We also changed a bit the behavior of ``conf.get()``. It used to allow objects that are not strings in the section or key.
+Doing this will now result in an exception. For instance, ``conf.get("section", 123)`` needs to be replaced with ``conf.get("section", "123")``.
+
+Bug Fixes
+"""""""""
+- Ensure that tasks wait for running indirect setup (#33903)
+- Respect "soft_fail" for core async sensors (#33403)
+- Differentiate 0 and unset as a default param values (#33965)
+- Raise 404 from Variable PATCH API if variable is not found (#33885)
+- Fix ``MappedTaskGroup`` tasks not respecting upstream dependency (#33732)
+- Add limit 1 if required first value from query result (#33672)
+- Fix UI DAG counts including deleted DAGs (#33778)
+- Fix cleaning zombie RESTARTING tasks (#33706)
+- ``SECURITY_MANAGER_CLASS`` should be a reference to class, not a string (#33690)
+- Add back ``get_url_for_login`` in security manager (#33660)
+- Fix ``2.7.0 db`` migration job errors (#33652)
+- Set context inside templates (#33645)
+- Treat dag-defined access_control as authoritative if defined (#33632)
+- Bind engine before attempting to drop archive tables (#33622)
+- Add a fallback in case no first name and last name are set (#33617)
+- Sort data before ``groupby`` in TIS duration calculation (#33535)
+- Stop adding values to rendered templates UI when there is no dagrun (#33516)
+- Set strict to True when parsing dates in webserver views (#33512)
+- Use ``dialect.name`` in custom SA types (#33503)
+- Do not return ongoing dagrun when a ``end_date`` is less than ``utcnow`` (#33488)
+- Fix a bug in ``formatDuration`` method (#33486)
+- Make ``conf.set`` case insensitive (#33452)
+- Allow timetable to slightly miss catchup cutoff (#33404)
+- Respect ``soft_fail`` argument when ``poke`` is called (#33401)
+- Create a new method used to resume the task in order to implement specific logic for operators (#33424)
+- Fix DagFileProcessor interfering with dags outside its ``processor_subdir`` (#33357)
+- Remove the unnecessary ``<br>`` text in Provider's view (#33326)
+- Respect ``soft_fail`` argument when ExternalTaskSensor runs in deferrable mode (#33196)
+- Fix handling of default value and serialization of Param class (#33141)
+- Check if the dynamically-added index is in the table schema before adding (#32731)
+- Fix rendering the mapped parameters when using ``expand_kwargs`` method (#32272)
+- Fix dependencies for celery and opentelemetry for Python 3.8 (#33579)
+
+Misc/Internal
+"""""""""""""
+- Bring back ``Pydantic`` 1 compatibility (#34081, #33998)
+- Use a trimmed version of README.md for PyPI (#33637)
+- Upgrade to ``Pydantic`` 2 (#33956)
+- Reorganize ``devel_only`` extra in Airflow's setup.py (#33907)
+- Bumping ``FAB`` to ``4.3.4`` in order to fix issues with filters (#33931)
+- Add minimum requirement for ``sqlalchemy to 1.4.24`` (#33892)
+- Update version_added field for configs in config file (#33509)
+- Replace ``OrderedDict`` with plain dict (#33508)
+- Consolidate import and usage of itertools (#33479)
+- Static check fixes (#33462)
+- Import utc from datetime and normalize its import (#33450)
+- D401 Support (#33352, #33339, #33337, #33336, #33335, #33333, #33338)
+- Fix some missing type hints (#33334)
+- D205 Support - Stragglers (#33301, #33298, #33297)
+- Refactor: Simplify code (#33160, #33270, #33268, #33267, #33266, #33264, #33292, #33453, #33476, #33567,
+  #33568, #33480, #33753, #33520, #33623)
+- Fix ``Pydantic`` warning about ``orm_mode`` rename (#33220)
+- Add MySQL 8.1 to supported versions. (#33576)
+- Remove ``Pydantic`` limitation for version < 2 (#33507)
+
+Doc only changes
+"""""""""""""""""
+- Add documentation explaining template_ext (and how to override it) (#33735)
+- Explain how users can check if python code is top-level (#34006)
+- Clarify that DAG authors can also run code in DAG File Processor (#33920)
+- Fix broken link in Modules Management page (#33499)
+- Fix secrets backend docs (#33471)
+- Fix config description for base_log_folder (#33388)
+
+
+Airflow 2.7.0 (2023-08-18)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+Remove Python 3.7 support (#30963)
+""""""""""""""""""""""""""""""""""
+As of now, Python 3.7 is no longer supported by the Python community.
+Therefore, to use Airflow 2.7.0, you must ensure your Python version is
+either 3.8, 3.9, 3.10, or 3.11.
+
+Old Graph View is removed (#32958)
+""""""""""""""""""""""""""""""""""
+The old Graph View is removed. The new Graph View is the default view now.
+
+The trigger UI form is skipped in web UI if no parameters are defined in a DAG (#33351)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+If you are using ``dag_run.conf`` dictionary and web UI JSON entry to run your DAG you should either:
+
+* `Add params to your DAG <https://airflow.apache.org/docs/apache-airflow/stable/core-concepts/params.html#use-params-to-provide-a-trigger-ui-form>`_
+* Enable the new configuration ``show_trigger_form_if_no_params`` to bring back old behaviour
+
+The "db init", "db upgrade" commands and "[database] load_default_connections" configuration options are deprecated (#33136).
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Instead, you should use "airflow db migrate" command to create or upgrade database. This command will not create default connections.
+In order to create default connections you need to run "airflow connections create-default-connections" explicitly,
+after running "airflow db migrate".
+
+In case of SMTP SSL connection, the context now uses the "default" context (#33070)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+The "default" context is Python's ``default_ssl_contest`` instead of previously used "none". The
+``default_ssl_context`` provides a balance between security and compatibility but in some cases,
+when certificates are old, self-signed or misconfigured, it might not work. This can be configured
+by setting "ssl_context" in "email" configuration of Airflow.
+
+Setting it to "none" brings back the "none" setting that was used in Airflow 2.6 and before,
+but it is not recommended due to security reasons ad this setting disables validation of certificates and allows MITM attacks.
+
+Disable default allowing the testing of connections in UI, API and CLI(#32052)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+For security reasons, the test connection functionality is disabled by default across Airflow UI,
+API and CLI. The availability of the functionality can be controlled by the
+``test_connection`` flag in the ``core`` section of the Airflow
+configuration (``airflow.cfg``). It can also be controlled by the
+environment variable ``AIRFLOW__CORE__TEST_CONNECTION``.
+
+The following values are accepted for this config param:
+1. ``Disabled``: Disables the test connection functionality and
+disables the Test Connection button in the UI.
+
+This is also the default value set in the Airflow configuration.
+2. ``Enabled``: Enables the test connection functionality and
+activates the Test Connection button in the UI.
+
+3. ``Hidden``: Disables the test connection functionality and
+hides the Test Connection button in UI.
+
+For more information on capabilities of users, see the documentation:
+https://airflow.apache.org/docs/apache-airflow/stable/security/security_model.html#capabilities-of-authenticated-ui-users
+It is strongly advised to **not** enable the feature until you make sure that only
+highly trusted UI/API users have "edit connection" permissions.
+
+The ``xcomEntries`` API disables support for the ``deserialize`` flag by default (#32176)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+For security reasons, the ``/dags/*/dagRuns/*/taskInstances/*/xcomEntries/*``
+API endpoint now disables the ``deserialize`` option to deserialize arbitrary
+XCom values in the webserver. For backward compatibility, server admins may set
+the ``[api] enable_xcom_deserialize_support`` config to *True* to enable the
+flag and restore backward compatibility.
+
+However, it is strongly advised to **not** enable the feature, and perform
+deserialization at the client side instead.
+
+Change of the default Celery application name (#32526)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Default name of the Celery application changed from ``airflow.executors.celery_executor`` to ``airflow.providers.celery.executors.celery_executor``.
+
+You should change both your configuration and Health check command to use the new name:
+  * in configuration (``celery_app_name`` configuration in ``celery`` section) use ``airflow.providers.celery.executors.celery_executor``
+  * in your Health check command use ``airflow.providers.celery.executors.celery_executor.app``
+
+
+The default value for ``scheduler.max_tis_per_query`` is changed from 512 to 16 (#32572)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+This change is expected to make the Scheduler more responsive.
+
+``scheduler.max_tis_per_query`` needs to be lower than ``core.parallelism``.
+If both were left to their default value previously, the effective default value of ``scheduler.max_tis_per_query`` was 32
+(because it was capped at ``core.parallelism``).
+
+To keep the behavior as close as possible to the old config, one can set ``scheduler.max_tis_per_query = 0``,
+in which case it'll always use the value of ``core.parallelism``.
+
+Some executors have been moved to corresponding providers (#32767)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+In order to use the executors, you need to install the providers:
+
+* for Celery executors you need to install ``apache-airflow-providers-celery`` package >= 3.3.0
+* for Kubernetes executors you need to install ``apache-airflow-providers-cncf-kubernetes`` package >= 7.4.0
+* For Dask executors you need to install ``apache-airflow-providers-daskexecutor`` package in any version
+
+You can achieve it also by installing airflow with ``[celery]``, ``[cncf.kubernetes]``, ``[daskexecutor]`` extras respectively.
+
+Users who base their images on the ``apache/airflow`` reference image (not slim) should be unaffected - the base
+reference image comes with all the three providers installed.
+
+Improvement Changes
+^^^^^^^^^^^^^^^^^^^
+
+PostgreSQL only improvement: Added index on taskinstance table (#30762)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+This index seems to have great positive effect in a setup with tens of millions such rows.
+
+New Features
+""""""""""""
+- Add OpenTelemetry to Airflow (`AIP-49 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3AAIP-49+milestone%3A%22Airflow+2.7.0%22>`_)
+- Trigger Button - Implement Part 2 of AIP-50 (#31583)
+- Removing Executor Coupling from Core Airflow (`AIP-51 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3AAIP-51+milestone%3A%22Airflow+2.7.0%22>`_)
+- Automatic setup and teardown tasks (`AIP-52 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3AAIP-52+milestone%3A%22Airflow+2.7.0%22>`_)
+- OpenLineage in Airflow (`AIP-53 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+milestone%3A%22Airflow+2.7.0%22+label%3Aprovider%3Aopenlineage>`_)
+- Experimental: Add a cache to Variable and Connection when called at dag parsing time (#30259)
+- Enable pools to consider deferred tasks (#32709)
+- Allows to choose SSL context for SMTP connection (#33070)
+- New gantt tab (#31806)
+- Load plugins from providers (#32692)
+- Add ``BranchExternalPythonOperator`` (#32787, #33360)
+- Add option for storing configuration description in providers (#32629)
+- Introduce Heartbeat Parameter to Allow ``Per-LocalTaskJob`` Configuration (#32313)
+- Add Executors discovery and documentation (#32532)
+- Add JobState for job state constants (#32549)
+- Add config to disable the 'deserialize' XCom API flag (#32176)
+- Show task instance in web UI by custom operator name (#31852)
+- Add default_deferrable config (#31712)
+- Introducing ``AirflowClusterPolicySkipDag`` exception (#32013)
+- Use ``reactflow`` for datasets graph (#31775)
+- Add an option to load the dags from db for command tasks run (#32038)
+- Add version of ``chain`` which doesn't require matched lists (#31927)
+- Use operator_name instead of task_type in UI (#31662)
+- Add ``--retry`` and ``--retry-delay`` to ``airflow db check`` (#31836)
+- Allow skipped task state task_instance_schema.py (#31421)
+- Add a new config for celery result_backend engine options (#30426)
+- UI Add Cluster Activity Page (#31123, #32446)
+- Adding keyboard shortcuts to common actions (#30950)
+- Adding more information to kubernetes executor logs (#29929)
+- Add support for configuring custom alembic file (#31415)
+- Add running and failed status tab for DAGs on the UI (#30429)
+- Add multi-select, proposals and labels for trigger form (#31441)
+- Making webserver config customizable (#29926)
+- Render DAGCode in the Grid View as a tab (#31113)
+- Add rest endpoint to get option of configuration (#31056)
+- Add ``section`` query param in get config rest API (#30936)
+- Create metrics to track ``Scheduled->Queued->Running`` task state transition times (#30612)
+- Mark Task Groups as Success/Failure (#30478)
+- Add CLI command to list the provider trigger info (#30822)
+- Add Fail Fast feature for DAGs (#29406)
+
+Improvements
+""""""""""""
+- Improve graph nesting logic (#33421)
+- Configurable health check threshold for triggerer (#33089, #33084)
+- add dag_run_ids and task_ids filter for the batch task instance API endpoint (#32705)
+- Ensure DAG-level references are filled on unmap (#33083)
+- Add support for arrays of different data types in the Trigger Form UI (#32734)
+- Always show gantt and code tabs (#33029)
+- Move listener success hook to after SQLAlchemy commit (#32988)
+- Rename ``db upgrade`` to ``db migrate`` and add ``connections create-default-connections`` (#32810, #33136)
+- Remove old gantt chart and redirect to grid views gantt tab (#32908)
+- Adjust graph zoom based on selected task (#32792)
+- Call listener on_task_instance_running after rendering templates (#32716)
+- Display execution_date in graph view task instance tooltip. (#32527)
+- Allow configuration to be contributed by providers (#32604, #32755, #32812)
+- Reduce default for max TIs per query, enforce ``<=`` parallelism (#32572)
+- Store config description in Airflow configuration object (#32669)
+- Use ``isdisjoint`` instead of ``not intersection`` (#32616)
+- Speed up calculation of leaves and roots for task groups (#32592)
+- Kubernetes Executor Load Time Optimizations (#30727)
+- Save DAG parsing time if dag is not schedulable (#30911)
+- Updates health check endpoint to include ``dag_processor`` status. (#32382)
+- Disable default allowing the testing of connections in UI, API and CLI (#32052, #33342)
+- Fix config var types under the scheduler section (#32132)
+- Allow to sort Grid View alphabetically (#32179)
+- Add hostname to triggerer metric ``[triggers.running]`` (#32050)
+- Improve DAG ORM cleanup code (#30614)
+- ``TriggerDagRunOperator``: Add ``wait_for_completion`` to ``template_fields`` (#31122)
+- Open links in new tab that take us away from Airflow UI (#32088)
+- Only show code tab when a task is not selected (#31744)
+- Add descriptions for celery and dask cert configs (#31822)
+- ``PythonVirtualenvOperator`` termination log in alert (#31747)
+- Migration of all DAG details to existing grid view dag details panel (#31690)
+- Add a diagram to help visualize timer metrics (#30650)
+- Celery Executor load time optimizations (#31001)
+- Update code style for ``airflow db`` commands to SQLAlchemy 2.0 style (#31486)
+- Mark uses of md5 as "not-used-for-security" in FIPS environments (#31171)
+- Add pydantic support to serde (#31565)
+- Enable search in note column in DagRun and TaskInstance (#31455)
+- Save scheduler execution time by adding new Index idea for dag_run (#30827)
+- Save scheduler execution time by caching dags (#30704)
+- Support for sorting DAGs by Last Run Date in the web UI (#31234)
+- Better typing for Job and JobRunners (#31240)
+- Add sorting logic by created_date for fetching triggers (#31151)
+- Remove DAGs.can_create on access control doc, adjust test fixture (#30862)
+- Split Celery logs into stdout/stderr (#30485)
+- Decouple metrics clients and ``validators`` into their own modules (#30802)
+- Description added for pagination in ``get_log`` api (#30729)
+- Optimize performance of scheduling mapped tasks (#30372)
+- Add sentry transport configuration option (#30419)
+- Better message on deserialization error (#30588)
+
+Bug Fixes
+"""""""""
+- Remove user sessions when resetting password (#33347)
+- ``Gantt chart:`` Use earliest/oldest ti dates if different than dag run start/end (#33215)
+- Fix ``virtualenv`` detection for Python ``virtualenv`` operator (#33223)
+- Correctly log when there are problems trying to ``chmod`` ``airflow.cfg`` (#33118)
+- Pass app context to webserver_config.py (#32759)
+- Skip served logs for non-running task try (#32561)
+- Fix reload gunicorn workers (#32102)
+- Fix future DagRun rarely triggered by race conditions when ``max_active_runs`` reached its upper limit. (#31414)
+- Fix BaseOperator ``get_task_instances`` query (#33054)
+- Fix issue with using the various state enum value in logs (#33065)
+- Use string concatenation to prepend base URL for log_url (#33063)
+- Update graph nodes with operator style attributes (#32822)
+- Affix webserver access_denied warning to be configurable (#33022)
+- Only load task action modal if user can edit (#32992)
+- OpenAPI Spec fix nullable alongside ``$ref`` (#32887)
+- Make the decorators of ``PythonOperator`` sub-classes extend its decorator (#32845)
+- Fix check if ``virtualenv`` is installed in ``PythonVirtualenvOperator`` (#32939)
+- Unwrap Proxy before checking ``__iter__`` in is_container() (#32850)
+- Override base log folder by using task handler's base_log_folder (#32781)
+- Catch arbitrary exception from run_job to prevent zombie scheduler (#32707)
+- Fix depends_on_past work for dynamic tasks (#32397)
+- Sort extra_links for predictable order in UI. (#32762)
+- Fix prefix group false graph (#32764)
+- Fix bad delete logic for dagruns (#32684)
+- Fix bug in prune_dict where empty dict and list would be removed even in strict mode (#32573)
+- Add explicit browsers list and correct rel for blank target links (#32633)
+- Handle returned None when multiple_outputs is True (#32625)
+- Fix returned value when ShortCircuitOperator condition is falsy and there is not downstream tasks (#32623)
+- Fix returned value when ShortCircuitOperator condition is falsy (#32569)
+- Fix rendering of ``dagRunTimeout`` (#32565)
+- Fix permissions on ``/blocked`` endpoint (#32571)
+- Bugfix, prevent force of unpause on trigger DAG (#32456)
+- Fix data interval in ``cli.dags.trigger`` command output (#32548)
+- Strip ``whitespaces`` from airflow connections form (#32292)
+- Add timedelta support for applicable arguments of sensors (#32515)
+- Fix incorrect default on ``readonly`` property in our API (#32510)
+- Add xcom map_index as a filter to xcom endpoint (#32453)
+- Fix CLI commands when custom timetable is used (#32118)
+- Use WebEncoder to encode DagRun.conf in DagRun's list view (#32385)
+- Fix logic of the skip_all_except method (#31153)
+- Ensure dynamic tasks inside dynamic task group only marks the (#32354)
+- Handle the cases that webserver.expose_config is set to non-sensitive-only instead of boolean value (#32261)
+- Add retry functionality for handling process termination caused by database network issues (#31998)
+- Adapt Notifier for sla_miss_callback (#31887)
+- Fix XCOM view (#31807)
+- Fix for "Filter dags by tag" flickering on initial load of dags.html (#31578)
+- Fix where expanding ``resizer`` would not expanse grid view (#31581)
+- Fix MappedOperator-BaseOperator attr sync check (#31520)
+- Always pass named ``type_`` arg to drop_constraint (#31306)
+- Fix bad ``drop_constraint`` call in migrations (#31302)
+- Resolving problems with redesigned grid view (#31232)
+- Support ``requirepass`` redis sentinel (#30352)
+- Fix webserver crash when calling get ``/config`` (#31057)
+
+Misc/Internal
+"""""""""""""
+- Modify pathspec version restriction (#33349)
+- Refactor: Simplify code in ``dag_processing`` (#33161)
+- For now limit ``Pydantic`` to ``< 2.0.0`` (#33235)
+- Refactor: Simplify code in models (#33181)
+- Add elasticsearch group to pre-2.7 defaults (#33166)
+- Refactor: Simplify dict manipulation in airflow/cli (#33159)
+- Remove redundant dict.keys() call (#33158)
+- Upgrade ruff to latest 0.0.282 version in pre-commits (#33152)
+- Move openlineage configuration to provider (#33124)
+- Replace State by TaskInstanceState in Airflow executors (#32627)
+- Get rid of Python 2 numeric relics (#33050)
+- Remove legacy dag code (#33058)
+- Remove legacy task instance modal (#33060)
+- Remove old graph view (#32958)
+- Move CeleryExecutor to the celery provider (#32526, #32628)
+- Move all k8S classes to ``cncf.kubernetes`` provider (#32767, #32891)
+- Refactor existence-checking SQL to helper (#32790)
+- Extract Dask executor to new daskexecutor provider (#32772)
+- Remove atlas configuration definition (#32776)
+- Add Redis task handler (#31855)
+- Move writing configuration for webserver to main (webserver limited) (#32766)
+- Improve getting the query count in Airflow API endpoints (#32630)
+- Remove click upper bound (#32634)
+- Add D400 ``pydocstyle`` check - core Airflow only (#31297)
+- D205 Support (#31742, #32575, #32213, #32212, #32591, #32449, #32450)
+- Bump word-wrap from ``1.2.3 to 1.2.4`` in ``/airflow/www`` (#32680)
+- Strong-type all single-state enum values (#32537)
+- More strong typed state conversion (#32521)
+- SQL query improvements in utils/db.py (#32518)
+- Bump semver from ``6.3.0 to 6.3.1`` in ``/airflow/www`` (#32506)
+- Bump jsonschema version to ``4.18.0`` (#32445)
+- Bump ``stylelint`` from ``13.13.1 to 15.10.1`` in ``/airflow/www`` (#32435)
+- Bump tough-cookie from ``4.0.0 to 4.1.3`` in ``/airflow/www`` (#32443)
+- upgrade flask-appbuilder (#32054)
+- Support ``Pydantic`` 2 (#32366)
+- Limit click until we fix mypy issues (#32413)
+- A couple of minor cleanups (#31890)
+- Replace State usages with strong-typed ``enums`` (#31735)
+- Upgrade ruff to ``0.272`` (#31966)
+- Better error message when serializing callable without name (#31778)
+- Improve the views module a bit (#31661)
+- Remove ``asynctest`` (#31664)
+- Refactor sqlalchemy queries to ``2.0`` style (#31569, #31772, #32350, #32339, #32474, #32645)
+- Remove Python ``3.7`` support (#30963)
+- Bring back min-airflow-version for preinstalled providers (#31469)
+- Docstring improvements (#31375)
+- Improve typing in SchedulerJobRunner (#31285)
+- Upgrade ruff to ``0.0.262`` (#30809)
+- Upgrade to MyPy ``1.2.0`` (#30687)
+
+Docs only changes
+"""""""""""""""""
+- Clarify UI user types in security model (#33021)
+- Add links to ``DAGRun / DAG / Task`` in templates-ref.rst (#33013)
+- Add docs of how to test for DAG Import Errors (#32811)
+- Clean-up of our new security page (#32951)
+- Cleans up Extras reference page (#32954)
+- Update Dag trigger API and command docs (#32696)
+- Add deprecation info to the Airflow modules and classes docstring (#32635)
+- Formatting installation doc to improve readability (#32502)
+- Fix triggerer HA doc (#32454)
+- Add type annotation to code examples (#32422)
+- Document cron and delta timetables (#32392)
+- Update index.rst doc to correct grammar (#32315)
+- Fixing small typo in python.py (#31474)
+- Separate out and clarify policies for providers (#30657)
+- Fix docs: add an "apache" prefix to pip install (#30681)
+
+
+Airflow 2.6.3 (2023-07-10)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+Default allowed pattern of a run_id has been changed to ``^[A-Za-z0-9_.~:+-]+$`` (#32293).
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Previously, there was no validation on the run_id string. There is now a validation regex that
+can be set by configuring ``allowed_run_id_pattern`` in ``scheduler`` section.
+
+Bug Fixes
+"""""""""
+- Use linear time regular expressions (#32303)
+- Fix triggerers alive check and add a new conf for triggerer heartbeat rate (#32123)
+- Catch the exception that triggerer initialization failed (#31999)
+- Hide sensitive values from extra in connection edit form (#32309)
+- Sanitize ``DagRun.run_id`` and allow flexibility (#32293)
+- Add triggerer canceled log (#31757)
+- Fix try number shown in the task view (#32361)
+- Retry transactions on occasional deadlocks for rendered fields (#32341)
+- Fix behaviour of LazyDictWithCache when import fails (#32248)
+- Remove ``executor_class`` from Job - fixing backfill for custom executors (#32219)
+- Fix bugged singleton implementation (#32218)
+- Use ``mapIndex`` to display extra links per mapped task. (#32154)
+- Ensure that main triggerer thread exits if the async thread fails (#32092)
+- Use ``re2`` for matching untrusted regex (#32060)
+- Render list items in rendered fields view (#32042)
+- Fix hashing of ``dag_dependencies`` in serialized dag (#32037)
+- Return ``None`` if an XComArg fails to resolve in a multiple_outputs Task (#32027)
+- Check for DAG ID in query param from url as well as kwargs (#32014)
+- Flash an error message instead of failure in ``rendered-templates`` when map index is not found (#32011)
+- Fix ``ExternalTaskSensor`` when there is no task group TIs for the current execution date (#32009)
+- Fix number param html type in trigger template (#31980, #31946)
+- Fix masking nested variable fields (#31964)
+- Fix ``operator_extra_links`` property serialization in mapped tasks (#31904)
+- Decode old-style nested Xcom value (#31866)
+- Add a check for trailing slash in webserver base_url (#31833)
+- Fix connection uri parsing when the host includes a scheme (#31465)
+- Fix database session closing with ``xcom_pull`` and ``inlets`` (#31128)
+- Fix DAG's ``on_failure_callback`` is not invoked when task failed during testing dag. (#30965)
+- Fix airflow module version check when using ``ExternalPythonOperator`` and debug logging level (#30367)
+
+Misc/Internal
+"""""""""""""
+- Fix ``task.sensor`` annotation in type stub (#31954)
+- Limit ``Pydantic`` to ``< 2.0.0`` until we solve ``2.0.0`` incompatibilities (#32312)
+- Fix ``Pydantic`` 2 pickiness about model definition (#32307)
+
+Doc only changes
+""""""""""""""""
+- Add explanation about tag creation and cleanup (#32406)
+- Minor updates to docs (#32369, #32315, #32310, #31794)
+- Clarify Listener API behavior (#32269)
+- Add information for users who ask for requirements (#32262)
+- Add links to DAGRun / DAG / Task in Templates Reference (#32245)
+- Add comment to warn off a potential wrong fix (#32230)
+- Add a note that we'll need to restart triggerer to reflect any trigger change (#32140)
+- Adding missing hyperlink to the tutorial documentation (#32105)
+- Added difference between Deferrable and Non-Deferrable Operators (#31840)
+- Add comments explaining need for special "trigger end" log message (#31812)
+- Documentation update on Plugin updates. (#31781)
+- Fix SemVer link in security documentation (#32320)
+- Update security model of Airflow (#32098)
+- Update references to restructured documentation from Airflow core (#32282)
+- Separate out advanced logging configuration (#32131)
+- Add ``™`` to Airflow in prominent places (#31977)
+
+
+Airflow 2.6.2 (2023-06-17)
+--------------------------
+
+Significant Changes
+^^^^^^^^^^^^^^^^^^^
+
+No significant changes.
+
+Bug Fixes
+^^^^^^^^^
+- Cascade update of TaskInstance to TaskMap table (#31445)
+- Fix Kubernetes executors detection of deleted pods (#31274)
+- Use keyword parameters for migration methods for mssql (#31309)
+- Control permissibility of driver config in extra from airflow.cfg (#31754)
+- Fixing broken links in openapi/v1.yaml (#31619)
+- Hide old alert box when testing connection with different value (#31606)
+- Add TriggererStatus to OpenAPI spec (#31579)
+- Resolving issue where Grid won't un-collapse when Details is collapsed (#31561)
+- Fix sorting of tags (#31553)
+- Add the missing ``map_index`` to the xcom key when skipping downstream tasks (#31541)
+- Fix airflow users delete CLI command (#31539)
+- Include triggerer health status in Airflow ``/health`` endpoint (#31529)
+- Remove dependency already registered for this task warning (#31502)
+- Use kube_client over default CoreV1Api for deleting pods (#31477)
+- Ensure min backoff in base sensor is at least 1 (#31412)
+- Fix ``max_active_tis_per_dagrun`` for Dynamic Task Mapping (#31406)
+- Fix error handling when pre-importing modules in DAGs (#31401)
+- Fix dropdown default and adjust tutorial to use 42 as default for proof (#31400)
+- Fix crash when clearing run with task from normal to mapped (#31352)
+- Make BaseJobRunner a generic on the job class (#31287)
+- Fix ``url_for_asset`` fallback and 404 on DAG Audit Log (#31233)
+- Don't present an undefined execution date (#31196)
+- Added spinner activity while the logs load (#31165)
+- Include rediss to the list of supported URL schemes (#31028)
+- Optimize scheduler by skipping "non-schedulable" DAGs (#30706)
+- Save scheduler execution time during search for queued dag_runs (#30699)
+- Fix ExternalTaskSensor to work correctly with task groups (#30742)
+- Fix DAG.access_control can't sync when clean access_control (#30340)
+- Fix failing get_safe_url tests for latest Python 3.8 and 3.9 (#31766)
+- Fix typing for POST user endpoint (#31767)
+- Fix wrong update for nested group default args (#31776)
+- Fix overriding ``default_args`` in nested task groups (#31608)
+- Mark ``[secrets] backend_kwargs`` as a sensitive config (#31788)
+- Executor events are not always "exited" here (#30859)
+- Validate connection IDs (#31140)
+
+Misc/Internal
+"""""""""""""
+- Add Python 3.11 support (#27264)
+- Replace unicodecsv with standard csv library (#31693)
+- Bring back unicodecsv as dependency of Airflow (#31814)
+- Remove found_descendents param from get_flat_relative_ids (#31559)
+- Fix typing in external task triggers (#31490)
+- Wording the next and last run DAG columns better (#31467)
+- Skip auto-document things with :meta private: (#31380)
+- Add an example for sql_alchemy_connect_args conf (#31332)
+- Convert dask upper-binding into exclusion (#31329)
+- Upgrade FAB to 4.3.1 (#31203)
+- Added metavar and choices to --state flag in airflow dags list-jobs CLI for suggesting valid state arguments. (#31308)
+- Use only one line for tmp dir log (#31170)
+- Rephrase comment in setup.py (#31312)
+- Add fullname to owner on logging (#30185)
+- Make connection id validation consistent across interface (#31282)
+- Use single source of truth for sensitive config items (#31820)
+
+Doc only changes
+^^^^^^^^^^^^^^^^
+- Add docstring and signature for _read_remote_logs (#31623)
+- Remove note about triggerer being 3.7+ only (#31483)
+- Fix version support information (#31468)
+- Add missing BashOperator import to documentation example (#31436)
+- Fix task.branch error caused by incorrect initial parameter (#31265)
+- Update callbacks documentation (errors and context) (#31116)
+- Add an example for dynamic task mapping with non-TaskFlow operator (#29762)
+- Few doc fixes - links, grammar and wording (#31719)
+- Add description in a few more places about adding airflow to pip install (#31448)
+- Fix table formatting in docker build documentation (#31472)
+- Update documentation for constraints installation (#31882)
+
 Airflow 2.6.1 (2023-05-16)
 --------------------------
 
@@ -209,7 +2572,7 @@ Improvements
 - Rename most pod_id usage to pod_name in KubernetesExecutor (#29147)
 - Update the error message for invalid use of poke-only sensors (#30821)
 - Update log level in scheduler critical section edge case (#30694)
-- AIP-51 Removing Executor Coupling from Core Airflow (`AIP-51 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3AAIP-51+milestone%3A%22Airflow+2.6.0%22>`_)
+- AIP-51 Removing Executor Coupling from Core Airflow (`AIP-51 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3AAIP-51+milestone%3A%22Airflow+2.6.0%22>`__)
 - Add multiple exit code handling in skip logic for BashOperator (#30739)
 - Updated app to support configuring the caching hash method for FIPS v2 (#30675)
 - Preload airflow imports before dag parsing to save time (#30495)
@@ -1050,8 +3413,7 @@ And to mark a task as producing a dataset pass the dataset(s) to the ``outlets``
 .. code-block:: python
 
     @task(outlets=[dataset])
-    def my_task():
-        ...
+    def my_task(): ...
 
 
     # Or for classic operators
@@ -1063,7 +3425,7 @@ If you have the producer and consumer in different files you do not need to use 
 Datasets represent the abstract concept of a dataset, and (for now) do not have any direct read or write
 capability - in this release we are adding the foundational feature that we will build upon.
 
-For more info on Datasets please see :doc:`/authoring-and-scheduling/datasets`.
+For more info on Datasets please see `Datasets documentation <https://airflow.apache.org/docs/apache-airflow/2.4.0/authoring-and-scheduling/datasets.html>`_.
 
 Expanded dynamic task mapping support
 """""""""""""""""""""""""""""""""""""
@@ -1085,8 +3447,7 @@ Previously you had to assign a DAG to a module-level variable in order for Airfl
 
 
    @dag
-   def dag_maker():
-       ...
+   def dag_maker(): ...
 
 
    dag2 = dag_maker()
@@ -1101,8 +3462,7 @@ can become
 
 
    @dag
-   def dag_maker():
-       ...
+   def dag_maker(): ...
 
 
    dag_maker()
@@ -1431,14 +3791,13 @@ For example, in your ``custom_config.py``:
 
     from airflow.utils.log.timezone_aware import TimezoneAware
 
+
     # before
-    class YourCustomFormatter(logging.Formatter):
-        ...
+    class YourCustomFormatter(logging.Formatter): ...
 
 
     # after
-    class YourCustomFormatter(TimezoneAware):
-        ...
+    class YourCustomFormatter(TimezoneAware): ...
 
 
     AIRFLOW_FORMATTER = LOGGING_CONFIG["formatters"]["airflow"]
@@ -1454,7 +3813,7 @@ Bug Fixes
 - Fix ``pid`` check (#24636)
 - Rotate session id during login (#25771)
 - Fix mapped sensor with reschedule mode (#25594)
-- Cache the custom secrets backend so the same instance gets re-used (#25556)
+- Cache the custom secrets backend so the same instance gets reused (#25556)
 - Add right padding (#25554)
 - Fix reducing mapped length of a mapped task at runtime after a clear (#25531)
 - Fix ``airflow db reset`` when dangling tables exist (#25441)
@@ -1843,8 +4202,6 @@ Details in the `SQLAlchemy Changelog <https://docs.sqlalchemy.org/en/14/changelo
 
 Previously, only one backend was used to authorize use of the REST API. In 2.3 this was changed to support multiple backends, separated by comma. Each will be tried in turn until a successful response is returned.
 
-This setting is also used for the deprecated experimental API, which only uses the first option even if multiple are given.
-
 ``airflow.models.base.Operator`` is removed (#21505)
 """"""""""""""""""""""""""""""""""""""""""""""""""""
 
@@ -1997,7 +4354,7 @@ and Airflow cannot be embedded in an iframe.
 New Features
 ^^^^^^^^^^^^
 
-- Add dynamic task mapping (`AIP-42 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3AAIP-42+milestone%3A%22Airflow+2.3.0%22>`_)
+- Add dynamic task mapping (`AIP-42 <https://github.com/apache/airflow/pulls?q=is%3Apr+is%3Amerged+label%3Aarea%3Adynamic-task-mapping+milestone%3A%22Airflow+2.3.0%22>`_)
 - New Grid View replaces Tree View (#18675)
 - Templated ``requirements.txt`` in Python Operators (#17349)
 - Allow reuse of decorated tasks (#22941)
@@ -2658,7 +5015,7 @@ Note: Upgrading the database to ``2.2.0`` or later can take some time to complet
 ``worker_log_server_port`` configuration has been moved to the ``logging`` section.
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-The ``worker_log_server_port`` configuration option has been moved from ``[celery]`` section to ``[logging]`` section to allow for re-use between different executors.
+The ``worker_log_server_port`` configuration option has been moved from ``[celery]`` section to ``[logging]`` section to allow for reuse between different executors.
 
 ``pandas`` is now an optional dependency
 """"""""""""""""""""""""""""""""""""""""""""
@@ -3457,7 +5814,7 @@ serve as a DagBag cache burst time.
 ``default_queue`` configuration has been moved to the ``operators`` section.
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-The ``default_queue`` configuration option has been moved from ``[celery]`` section to ``[operators]`` section to allow for re-use between different executors.
+The ``default_queue`` configuration option has been moved from ``[celery]`` section to ``[operators]`` section to allow for reuse between different executors.
 
 New Features
 ^^^^^^^^^^^^
@@ -3536,7 +5893,7 @@ Improvements
 - Update Tree View date ticks (#14141)
 - Make the tooltip to Pause / Unpause a DAG clearer (#13642)
 - Warn about precedence of env var when getting variables (#13501)
-- Move ``[celery] default_queue`` config to ``[operators] default_queue`` to re-use between executors  (#14699)
+- Move ``[celery] default_queue`` config to ``[operators] default_queue`` to reuse between executors  (#14699)
 
 Bug Fixes
 ^^^^^^^^^
@@ -3956,7 +6313,7 @@ Airflow 2.0.0 (2020-12-18)
 --------------------------
 
 The full changelog is about 3,000 lines long (already excluding everything backported to 1.10)
-so please check `Airflow 2.0.0 Highligths Blog Post <https://airflow.apache.org/blog/airflow-two-point-oh-is-here/>`_
+so please check `Airflow 2.0.0 Highlights Blog Post <https://airflow.apache.org/blog/airflow-two-point-oh-is-here/>`_
 instead.
 
 Significant Changes
@@ -4130,27 +6487,22 @@ The old syntax of passing ``context`` as a dictionary will continue to work with
 
 .. code-block:: python
 
-   def execution_date_fn(execution_date, ctx):
-       ...
+   def execution_date_fn(execution_date, ctx): ...
 
 ``execution_date_fn`` can take in any number of keyword arguments available in the task context dictionary. The following forms of ``execution_date_fn`` are all supported:
 
 .. code-block:: python
 
-   def execution_date_fn(dt):
-       ...
+   def execution_date_fn(dt): ...
 
 
-   def execution_date_fn(execution_date):
-       ...
+   def execution_date_fn(execution_date): ...
 
 
-   def execution_date_fn(execution_date, ds_nodash):
-       ...
+   def execution_date_fn(execution_date, ds_nodash): ...
 
 
-   def execution_date_fn(execution_date, ds_nodash, dag):
-       ...
+   def execution_date_fn(execution_date, ds_nodash, dag): ...
 
 The default value for ``[webserver] cookie_samesite`` has been changed to ``Lax``
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -4711,8 +7063,8 @@ The change is backwards compatible, setting ``provide_context`` will add the ``p
 
 PR: `#5990 <https://github.com/apache/airflow/pull/5990>`_
 
-``airflow.sensors.filesystem.FileSensor``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``airflow.providers.standard.sensors.filesystem.FileSensor``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 FileSensor is now takes a glob pattern, not just a filename. If the filename you are looking for has ``*``\ , ``?``\ , or ``[`` in it then you should replace these with ``[*]``\ , ``[?]``\ , and ``[[]``.
 
@@ -4877,8 +7229,7 @@ Previous signature:
        external_trigger=False,
        conf=None,
        session=None,
-   ):
-       ...
+   ): ...
 
 current:
 
@@ -4894,8 +7245,7 @@ current:
        conf=None,
        run_type=None,
        session=None,
-   ):
-       ...
+   ): ...
 
 If user provides ``run_id`` then the ``run_type`` will be derived from it by checking prefix, allowed types
 : ``manual``\ , ``scheduled``\ , ``backfill`` (defined by ``airflow.utils.types.DagRunType``\ ).
@@ -4954,7 +7304,7 @@ It has been removed.
 ``airflow.settings.CONTEXT_MANAGER_DAG``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-CONTEXT_MANAGER_DAG was removed from settings. It's role has been taken by ``DagContext`` in
+CONTEXT_MANAGER_DAG was removed from settings. Its role has been taken by ``DagContext`` in
 'airflow.models.dag'. One of the reasons was that settings should be rather static than store
 dynamic context from the DAG, but the main one is that moving the context out of settings allowed to
 untangle cyclic imports between DAG, BaseOperator, SerializedDAG, SerializedBaseOperator which was
@@ -4993,8 +7343,9 @@ can be replaced by the following code:
 
    logger = logging.getLogger("custom-logger")
 
-   with redirect_stdout(StreamLogWriter(logger, logging.INFO)), redirect_stderr(
-       StreamLogWriter(logger, logging.WARN)
+   with (
+       redirect_stdout(StreamLogWriter(logger, logging.INFO)),
+       redirect_stderr(StreamLogWriter(logger, logging.WARN)),
    ):
        print("I Love Airflow")
 
@@ -5023,8 +7374,7 @@ are deprecated and will be removed in future versions.
        include_examples=conf.getboolean("core", "LOAD_EXAMPLES"),
        safe_mode=conf.getboolean("core", "DAG_DISCOVERY_SAFE_MODE"),
        store_serialized_dags=False,
-   ):
-       ...
+   ): ...
 
 **current**\ :
 
@@ -5035,8 +7385,7 @@ are deprecated and will be removed in future versions.
        include_examples=conf.getboolean("core", "LOAD_EXAMPLES"),
        safe_mode=conf.getboolean("core", "DAG_DISCOVERY_SAFE_MODE"),
        read_dags_from_db=False,
-   ):
-       ...
+   ): ...
 
 If you were using positional arguments, it requires no change but if you were using keyword
 arguments, please change ``store_serialized_dags`` to ``read_dags_from_db``.
@@ -5658,7 +8007,7 @@ Other GCP hooks are unaffected.
 ``airflow.providers.google.cloud.sensors.pubsub.PubSubPullSensor``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In the ``PubSubPublishOperator`` and ``PubSubHook.publsh`` method the data field in a message should be bytestring (utf-8 encoded) rather than base64 encoded string.
+In the ``PubSubPublishOperator`` and ``PubSubHook.publish`` method the data field in a message should be bytestring (utf-8 encoded) rather than base64 encoded string.
 
 Due to the normalization of the parameters within GCP operators and hooks a parameters like ``project`` or ``topic_project``
 are deprecated and will be substituted by parameter ``project_id``.
@@ -5858,8 +8207,7 @@ Before:
        dataset_id: str,
        dataset_resource: dict,
        # ...
-   ):
-       ...
+   ): ...
 
 After:
 
@@ -5869,8 +8217,7 @@ After:
        dataset_resource: dict,
        dataset_id: Optional[str] = None,
        # ...
-   ):
-       ...
+   ): ...
 
 Changes in ``amazon`` provider package
 """"""""""""""""""""""""""""""""""""""""""
@@ -7077,7 +9424,7 @@ Improvements
 - [AIRFLOW-6871] Optimize tree view for large DAGs (#7492)
 - [AIRFLOW-7063] Fix dag.clear() slowness caused by count (#7723)
 - [AIRFLOW-7023] Remove duplicated package definitions in setup.py (#7675)
-- [AIRFLOW-7001] Time zone removed from MySQL TIMSTAMP field inserts
+- [AIRFLOW-7001] Time zone removed from MySQL TIMESTAMP field inserts
 - [AIRFLOW-7105] Unify Secrets Backend method interfaces (#7830)
 - Make BaseSecretsBackend.build_path generic (#7948)
 - Allow hvac package installation using 'hashicorp' extra (#7915)
@@ -7950,16 +10297,14 @@ Old signature:
 
 .. code-block:: python
 
-   def get_task_instances(self, session, start_date=None, end_date=None):
-       ...
+   def get_task_instances(self, session, start_date=None, end_date=None): ...
 
 New signature:
 
 .. code-block:: python
 
    @provide_session
-   def get_task_instances(self, start_date=None, end_date=None, session=None):
-       ...
+   def get_task_instances(self, start_date=None, end_date=None, session=None): ...
 
 For ``DAG``
 ~~~~~~~~~~~~~~~
@@ -7968,16 +10313,14 @@ Old signature:
 
 .. code-block:: python
 
-   def get_task_instances(self, session, start_date=None, end_date=None, state=None):
-       ...
+   def get_task_instances(self, session, start_date=None, end_date=None, state=None): ...
 
 New signature:
 
 .. code-block:: python
 
    @provide_session
-   def get_task_instances(self, start_date=None, end_date=None, state=None, session=None):
-       ...
+   def get_task_instances(self, start_date=None, end_date=None, state=None, session=None): ...
 
 In either case, it is necessary to rewrite calls to the ``get_task_instances`` method that currently provide the ``session`` positional argument. New calls to this method look like:
 
@@ -8458,15 +10801,13 @@ Old signature:
 
 .. code-block:: python
 
-   def create_transfer_job(self, description, schedule, transfer_spec, project_id=None):
-       ...
+   def create_transfer_job(self, description, schedule, transfer_spec, project_id=None): ...
 
 New signature:
 
 .. code-block:: python
 
-   def create_transfer_job(self, body):
-       ...
+   def create_transfer_job(self, body): ...
 
 It is necessary to rewrite calls to method. The new call looks like this:
 
@@ -8491,15 +10832,13 @@ Old signature:
 
 .. code-block:: python
 
-   def wait_for_transfer_job(self, job):
-       ...
+   def wait_for_transfer_job(self, job): ...
 
 New signature:
 
 .. code-block:: python
 
-   def wait_for_transfer_job(self, job, expected_statuses=(GcpTransferOperationStatus.SUCCESS,)):
-       ...
+   def wait_for_transfer_job(self, job, expected_statuses=(GcpTransferOperationStatus.SUCCESS,)): ...
 
 The behavior of ``wait_for_transfer_job`` has changed:
 

@@ -171,7 +171,7 @@ by using the ``| default`` Jinja filter as shown below.
 Much like the ``KubernetesExecutor``, the ``KubernetesPodOperator`` will no longer take Airflow custom classes and will
 instead expect either a pod_template yaml file, or ``kubernetes.client.models`` objects.
 
-The one notable exception is that we will continue to support the ``airflow.kubernetes.secret.Secret`` class.
+The one notable exception is that we will continue to support the ``airflow.providers.cncf.kubernetes.secret.Secret`` class.
 
 Whereas previously a user would import each individual class to build the pod as so:
 
@@ -218,7 +218,7 @@ Now the user can use the ``kubernetes.client.models`` class as a single point of
 .. code-block:: python
 
     from kubernetes.client import models as k8s
-    from airflow.kubernetes.secret import Secret
+    from airflow.providers.cncf.kubernetes.secret import Secret
 
 
     configmaps = ["test-configmap-1", "test-configmap-2"]
@@ -280,7 +280,7 @@ now represented as ``can_read`` on ``DAG:example_dag_id``.
 There is a special view called ``DAGs`` (it was called ``all_dags`` in versions 1.10.x) which allows the role to access
 all the DAGs. The default ``Admin``, ``Viewer``, ``User``, ``Op`` roles can all access the ``DAGs`` view.
 
-*As part of running ``airflow db upgrade``, existing permissions will be migrated for you.*
+*As part of running ``airflow db migrate``, existing permissions will be migrated for you.*
 
 When DAGs are initialized with the ``access_control`` variable set, any usage of the old permission names will automatically be updated in the database, so this won't be a breaking change. A DeprecationWarning will be raised.
 
@@ -541,7 +541,7 @@ At this point, just follow the standard Airflow version upgrade process:
   * Please note that you may have to uninstall the backport providers before installing the new providers, if you are installing using pip. This would not apply if you are installing using an Airflow Docker image with a set of specified requirements, where the change automatically gets a fresh set of modules.
   * You can read more about providers at :doc:`apache-airflow-providers:index`.
 
-* Upgrade the Airflow meta database using ``airflow db upgrade``.
+* Migrate the Airflow meta database using ``airflow db migrate``.
 
   * The above command may be unfamiliar, since it is shown using the Airflow 2.0 CLI syntax.
   * The database upgrade may modify the database schema as needed and also map the existing data to be compliant with the update database schema.
@@ -873,56 +873,6 @@ After:
         task_id="task-two",
     )
 
-
-Migration Guide from Experimental API to Stable API v1
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-In Airflow 2.0, we added the new REST API. Experimental API still works, but support may be dropped in the future.
-
-The experimental API, however, does not require authentication, so it is disabled by default. You need to explicitly enable the experimental API if you want to use it.
-If your application is still using the experimental API, you should **seriously** consider migrating to the stable API.
-
-The stable API exposes many endpoints available through the webserver. Here are the
-differences between the two endpoints that will help you migrate from the
-experimental REST API to the stable REST API.
-
-**Base Endpoint**
-
-The base endpoint for the stable API v1 is ``/api/v1/``. You must change the
-experimental base endpoint from ``/api/experimental/`` to ``/api/v1/``.
-The table below shows the differences:
-
-================================= ==================================================================================== ==================================================================================
-Purpose                           Experimental REST API Endpoint                                                       Stable REST API Endpoint
-================================= ==================================================================================== ==================================================================================
-Create a DAGRuns(POST)            ``/api/experimental/dags/<DAG_ID>/dag_runs``                                         ``/api/v1/dags/{dag_id}/dagRuns``
-List DAGRuns(GET)                 ``/api/experimental/dags/<DAG_ID>/dag_runs``                                         ``/api/v1/dags/{dag_id}/dagRuns``
-Check Health status(GET)          ``/api/experimental/test``                                                           ``/api/v1/health``
-Task information(GET)             ``/api/experimental/dags/<DAG_ID>/tasks/<TASK_ID>``                                  ``/api/v1//dags/{dag_id}/tasks/{task_id}``
-TaskInstance public variable(GET) ``/api/experimental/dags/<DAG_ID>/dag_runs/<string:execution_date>/tasks/<TASK_ID>`` ``/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}``
-Pause DAG(PATCH)                  ``/api/experimental/dags/<DAG_ID>/paused/<string:paused>``                           ``/api/v1/dags/{dag_id}``
-Information of paused DAG(GET)    ``/api/experimental/dags/<DAG_ID>/paused``                                           ``/api/v1/dags/{dag_id}``
-Latest DAG Runs(GET)              ``/api/experimental/latest_runs``                                                    ``/api/v1/dags/{dag_id}/dagRuns``
-Get all pools(GET)                ``/api/experimental/pools``                                                          ``/api/v1/pools``
-Create a pool(POST)               ``/api/experimental/pools``                                                          ``/api/v1/pools``
-Delete a pool(DELETE)             ``/api/experimental/pools/<string:name>``                                            ``/api/v1/pools/{pool_name}``
-DAG Lineage(GET)                  ``/api/experimental/lineage/<DAG_ID>/<string:execution_date>/``                      ``/api/v1/dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries``
-================================= ==================================================================================== ==================================================================================
-
-
-This endpoint ``/api/v1/dags/{dag_id}/dagRuns`` also allows you to filter dag_runs with parameters such as ``start_date``, ``end_date``, ``execution_date`` etc in the query string.
-Therefore the operation previously performed by this endpoint:
-
-.. code-block:: bash
-
-    /api/experimental/dags/<string:dag_id>/dag_runs/<string:execution_date>
-
-can now be handled with filter parameters in the query string.
-Getting information about latest runs can be accomplished with the help of
-filters in the query string of this endpoint(``/api/v1/dags/{dag_id}/dagRuns``). Please check the Stable API
-reference documentation for more information
-
-
 Changes to Exception handling for from DAG callbacks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1062,7 +1012,7 @@ Old command                                          New command
 ``airflow flower [-ba, --basic_auth]``               ``airflow celery flower [-A, --basic-auth]``
 ==================================================== ====================================================
 
-For Airflow long option, use [kebab-case](https://en.wikipedia.org/wiki/Letter_case) instead of [snake_case](https://en.wikipedia.org/wiki/Snake_case)
+For Airflow long option, use `kebab-case <https://en.wikipedia.org/wiki/Letter_case>`_ instead of `snake_case <https://en.wikipedia.org/wiki/Snake_case>`_
 
 ================================== ===================================
 Old option                         New option

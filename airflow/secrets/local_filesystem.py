@@ -16,12 +16,12 @@
 # specific language governing permissions and limitations
 # under the License.
 """Objects relating to retrieving connections and variables from local file."""
+
 from __future__ import annotations
 
 import json
 import logging
 import os
-import warnings
 from collections import defaultdict
 from inspect import signature
 from json import JSONDecodeError
@@ -32,7 +32,6 @@ from airflow.exceptions import (
     AirflowFileParseException,
     ConnectionNotUnique,
     FileSyntaxError,
-    RemovedInAirflow3Warning,
 )
 from airflow.secrets.base_secrets import BaseSecretsBackend
 from airflow.utils import yaml
@@ -46,7 +45,7 @@ if TYPE_CHECKING:
 
 
 def get_connection_parameter_names() -> set[str]:
-    """Returns :class:`airflow.models.connection.Connection` constructor parameters."""
+    """Return :class:`airflow.models.connection.Connection` constructor parameters."""
     from airflow.models.connection import Connection
 
     return {k for k in signature(Connection.__init__).parameters.keys() if k != "self"}
@@ -186,7 +185,7 @@ def _parse_secret_file(file_path: str) -> dict[str, Any]:
 
 
 def _create_connection(conn_id: str, value: Any):
-    """Creates a connection based on a URL or JSON object."""
+    """Create a connection based on a URL or JSON object."""
     from airflow.models.connection import Connection
 
     if isinstance(value, str):
@@ -240,16 +239,6 @@ def load_variables(file_path: str) -> dict[str, str]:
     variables = {key: values[0] if isinstance(values, list) else values for key, values in secrets.items()}
     log.debug("Loaded %d variables: ", len(variables))
     return variables
-
-
-def load_connections(file_path) -> dict[str, list[Any]]:
-    """Deprecated: Please use `airflow.secrets.local_filesystem.load_connections_dict`."""
-    warnings.warn(
-        "This function is deprecated. Please use `airflow.secrets.local_filesystem.load_connections_dict`.",
-        RemovedInAirflow3Warning,
-        stacklevel=2,
-    )
-    return {k: [v] for k, v in load_connections_dict(file_path).values()}
 
 
 def load_connections_dict(file_path: str) -> dict[str, Any]:
@@ -316,18 +305,6 @@ class LocalFilesystemBackend(BaseSecretsBackend, LoggingMixin):
         if conn_id in self._local_connections:
             return self._local_connections[conn_id]
         return None
-
-    def get_connections(self, conn_id: str) -> list[Any]:
-        warnings.warn(
-            "This method is deprecated. Please use "
-            "`airflow.secrets.local_filesystem.LocalFilesystemBackend.get_connection`.",
-            RemovedInAirflow3Warning,
-            stacklevel=2,
-        )
-        conn = self.get_connection(conn_id=conn_id)
-        if conn:
-            return [conn]
-        return []
 
     def get_variable(self, key: str) -> str | None:
         return self._local_variables.get(key)

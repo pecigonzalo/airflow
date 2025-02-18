@@ -37,7 +37,7 @@ Storing Variables in Environment Variables
 
 Airflow Variables can also be created and managed using Environment Variables. The environment variable
 naming convention is :envvar:`AIRFLOW_VAR_{VARIABLE_NAME}`, all uppercase.
-So if your variable key is ``FOO`` then the variable name should be ``AIRFLOW_VAR_FOO``.
+So if your variable key is ``foo`` then the variable name should be ``AIRFLOW_VAR_FOO``.
 
 For example,
 
@@ -73,4 +73,4 @@ It guarantees that without the encryption password, content cannot be manipulate
 without the key. For information on configuring Fernet, look at :ref:`security/fernet`.
 
 In addition to retrieving variables from environment variables or the metastore database, you can enable
-a secrets backend to retrieve variables. For more details see :doc:`/administration-and-deployment/security/secrets/secrets-backend/index`.
+a secrets backend to retrieve variables. For more details see :doc:`/security/secrets/secrets-backend/index`.

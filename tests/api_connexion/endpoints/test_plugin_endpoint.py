@@ -16,30 +16,97 @@
 # under the License.
 from __future__ import annotations
 
+import inspect
+
 import pytest
+from fastapi import FastAPI
+from flask import Blueprint
+from flask_appbuilder import BaseView
 
 from airflow.plugins_manager import AirflowPlugin
-from airflow.security import permissions
-from tests.test_utils.api_connexion_utils import assert_401, create_user, delete_user
-from tests.test_utils.config import conf_vars
-from tests.test_utils.mock_plugins import mock_plugin_manager
+from airflow.timetables.base import Timetable
+from airflow.utils.module_loading import qualname
+
+from tests_common.test_utils.api_connexion_utils import assert_401, create_user, delete_user
+from tests_common.test_utils.compat import BaseOperatorLink
+from tests_common.test_utils.config import conf_vars
+from tests_common.test_utils.mock_plugins import mock_plugin_manager
+
+pytestmark = pytest.mark.db_test
+
+
+def plugin_macro(): ...
+
+
+class MockOperatorLink(BaseOperatorLink):
+    name = "mock_operator_link"
+
+    def get_link(self, operator, *, ti_key) -> str:
+        return "mock_operator_link"
+
+
+bp = Blueprint("mock_blueprint", __name__, url_prefix="/mock_blueprint")
+
+app = FastAPI()
+
+app_with_metadata = {"app": app, "url_prefix": "/some_prefix", "name": "App name"}
+
+
+class MockView(BaseView): ...
+
+
+mockview = MockView()
+
+appbuilder_menu_items = {
+    "name": "mock_plugin",
+    "href": "https://example.com",
+}
+
+
+class CustomTimetable(Timetable):
+    def infer_manual_data_interval(self, *, run_after):
+        pass
+
+    def next_dagrun_info(
+        self,
+        *,
+        last_automated_data_interval,
+        restriction,
+    ):
+        pass
+
+
+class MyCustomListener:
+    pass
+
+
+class MockPlugin(AirflowPlugin):
+    name = "mock_plugin"
+    flask_blueprints = [bp]
+    fastapi_apps = [app_with_metadata]
+    appbuilder_views = [{"view": mockview}]
+    appbuilder_menu_items = [appbuilder_menu_items]
+    global_operator_extra_links = [MockOperatorLink()]
+    operator_extra_links = [MockOperatorLink()]
+    macros = [plugin_macro]
+    timetables = [CustomTimetable]
+    listeners = [pytest, MyCustomListener()]  # using pytest here because we need a module(just for test)
 
 
 @pytest.fixture(scope="module")
 def configured_app(minimal_app_for_api):
     app = minimal_app_for_api
     create_user(
-        app,  # type: ignore
+        app,
         username="test",
-        role_name="Test",
-        permissions=[(permissions.ACTION_CAN_READ, permissions.RESOURCE_PLUGIN)],
+        role_name="admin",
     )
-    create_user(app, username="test_no_permissions", role_name="TestNoPermissions")  # type: ignore
+    create_user(app, username="test_no_permissions", role_name=None)
 
     yield app
 
-    delete_user(app, username="test")  # type: ignore
-    delete_user(app, username="test_no_permissions")  # type: ignore
+    delete_user(app, username="test")
+    delete_user(app, username="test_no_permissions")
 
 
 class TestPluginsEndpoint:
@@ -54,7 +121,7 @@ class TestPluginsEndpoint:
 
 class TestGetPlugins(TestPluginsEndpoint):
     def test_get_plugins_return_200(self):
-        mock_plugin = AirflowPlugin()
+        mock_plugin = MockPlugin()
         mock_plugin.name = "test_plugin"
         with mock_plugin_manager(plugins=[mock_plugin]):
             response = self.client.get("api/v1/plugins", environ_overrides={"REMOTE_USER": "test"})
@@ -62,16 +129,28 @@ class TestGetPlugins(TestPluginsEndpoint):
         assert response.json == {
             "plugins": [
                 {
-                    "appbuilder_menu_items": [],
-                    "appbuilder_views": [],
-                    "executors": [],
-                    "flask_blueprints": [],
-                    "global_operator_extra_links": [],
-                    "hooks": [],
-                    "macros": [],
-                    "operator_extra_links": [],
+                    "appbuilder_menu_items": [appbuilder_menu_items],
+                    "appbuilder_views": [{"view": qualname(MockView)}],
+                    "flask_blueprints": [
+                        f"<{qualname(bp.__class__)}: name={bp.name!r} import_name={bp.import_name!r}>"
+                    ],
+                    "fastapi_apps": [
+                        {
+                            "app": "fastapi.applications.FastAPI",
+                            "name": "App name",
+                            "url_prefix": "/some_prefix",
+                        }
+                    ],
+                    "global_operator_extra_links": [f"<{qualname(MockOperatorLink().__class__)} object>"],
+                    "macros": [qualname(plugin_macro)],
+                    "operator_extra_links": [f"<{qualname(MockOperatorLink().__class__)} object>"],
                     "source": None,
                     "name": "test_plugin",
+                    "timetables": [qualname(CustomTimetable)],
+                    "listeners": [
+                        d.__name__ if inspect.ismodule(d) else qualname(d)
+                        for d in [pytest, MyCustomListener()]
+                    ],
                 }
             ],
             "total_entries": 1,

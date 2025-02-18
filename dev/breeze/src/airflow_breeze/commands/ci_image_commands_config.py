@@ -22,6 +22,10 @@ CI_IMAGE_TOOLS_COMMANDS: dict[str, str | list[str]] = {
         "build",
         "pull",
         "verify",
+        "save",
+        "load",
+        "export-mount-cache",
+        "import-mount-cache",
     ],
 }
 CI_IMAGE_TOOLS_PARAMETERS: dict[str, list[dict[str, str | list[str]]]] = {
@@ -32,48 +36,69 @@ CI_IMAGE_TOOLS_PARAMETERS: dict[str, list[dict[str, str | list[str]]]] = {
                 "--python",
                 "--upgrade-to-newer-dependencies",
                 "--upgrade-on-failure",
-                "--image-tag",
-                "--tag-as-latest",
                 "--docker-cache",
-                "--force-build",
+                "--version-suffix-for-pypi",
+                "--build-progress",
+                "--docker-host",
             ],
         },
         {
             "name": "Building images in parallel",
             "options": [
-                "--run-in-parallel",
-                "--parallelism",
-                "--python-versions",
-                "--skip-cleanup",
                 "--debug-resources",
                 "--include-success-outputs",
+                "--parallelism",
+                "--python-versions",
+                "--run-in-parallel",
+                "--skip-cleanup",
             ],
         },
         {
-            "name": "Advanced options (for power users)",
+            "name": "Advanced build options (for power users)",
             "options": [
-                "--builder",
-                "--install-providers-from-sources",
+                "--additional-pip-install-flags",
+                "--commit-sha",
+                "--debian-version",
+                "--disable-airflow-repo-cache",
+                "--install-mysql-client-type",
+                "--python-image",
+                "--use-uv",
+                "--uv-http-timeout",
+            ],
+        },
+        {
+            "name": "Selecting constraint location (for power users)",
+            "options": [
                 "--airflow-constraints-location",
                 "--airflow-constraints-mode",
                 "--airflow-constraints-reference",
-                "--python-image",
+            ],
+        },
+        {
+            "name": "Choosing dependencies and extras (for power users)",
+            "options": [
+                "--additional-airflow-extras",
                 "--additional-python-deps",
-                "--additional-extras",
-                "--additional-pip-install-flags",
-                "--additional-dev-apt-deps",
-                "--additional-dev-apt-env",
-                "--additional-dev-apt-command",
                 "--dev-apt-deps",
+                "--additional-dev-apt-deps",
                 "--dev-apt-command",
+                "--additional-dev-apt-command",
+                "--additional-dev-apt-env",
+            ],
+        },
+        {
+            "name": "Backtracking options",
+            "options": [
+                "--build-timeout-minutes",
+                "--eager-upgrade-additional-requirements",
             ],
         },
         {
             "name": "Preparing cache and push (for maintainers and CI)",
             "options": [
+                "--builder",
                 "--platform",
                 "--push",
-                "--empty-image",
                 "--prepare-buildx-cache",
             ],
         },
@@ -89,11 +114,9 @@ CI_IMAGE_TOOLS_PARAMETERS: dict[str, list[dict[str, str | list[str]]]] = {
         {
             "name": "Pull image flags",
             "options": [
-                "--image-tag",
                 "--python",
                 "--verify",
                 "--wait-for-image",
-                "--tag-as-latest",
             ],
         },
         {
@@ -121,8 +144,18 @@ CI_IMAGE_TOOLS_PARAMETERS: dict[str, list[dict[str, str | list[str]]]] = {
             "options": [
                 "--image-name",
                 "--python",
-                "--image-tag",
                 "--pull",
+            ],
+        },
+        {
+            "name": "Parallel running",
+            "options": [
+                "--run-in-parallel",
+                "--parallelism",
+                "--python-versions",
+                "--skip-cleanup",
+                "--debug-resources",
+                "--include-success-outputs",
             ],
         },
         {
@@ -130,6 +163,52 @@ CI_IMAGE_TOOLS_PARAMETERS: dict[str, list[dict[str, str | list[str]]]] = {
             "options": [
                 "--github-repository",
                 "--github-token",
+            ],
+        },
+    ],
+    "breeze ci-image save": [
+        {
+            "name": "Save image flags",
+            "options": [
+                "--python",
+                "--platform",
+                "--github-repository",
+                "--image-file",
+                "--image-file-dir",
+            ],
+        },
+    ],
+    "breeze ci-image load": [
+        {
+            "name": "Load image flags",
+            "options": [
+                "--python",
+                "--platform",
+                "--image-file",
+                "--image-file-dir",
+                "--github-repository",
+                "--github-token",
+                "--from-pr",
+                "--from-run",
+                "--skip-image-file-deletion",
+            ],
+        },
+    ],
+    "breeze ci-image export-mount-cache": [
+        {
+            "name": "Export flags",
+            "options": [
+                "--cache-file",
+                "--builder",
+            ],
+        },
+    ],
+    "breeze ci-image import-mount-cache": [
+        {
+            "name": "Import flags",
+            "options": [
+                "--cache-file",
+                "--builder",
             ],
         },
     ],

@@ -17,12 +17,11 @@
 from __future__ import annotations
 
 import logging
+import time
 from unittest import mock
-from unittest.mock import ANY
 
 import pytest
 from opentelemetry.metrics import MeterProvider
-from pytest import param
 
 from airflow.exceptions import InvalidStatsNameException
 from airflow.metrics.otel_logger import (
@@ -65,9 +64,9 @@ class TestOtelMetrics:
         assert not _is_up_down_counter("this_is_not_a_udc")
 
     def test_exemption_list_has_not_grown(self):
-        assert len(BACK_COMPAT_METRIC_NAMES) <= 23, (
+        assert len(BACK_COMPAT_METRIC_NAMES) <= 26, (
             "This test exists solely to ensure that nobody is adding names to the exemption list. "
-            "There are 23 names which are potentially too long for OTel and that number should "
+            "There are 26 names which are potentially too long for OTel and that number should "
             "only ever go down as these names are deprecated.  If this test is failing, please "
             "adjust your new stat's name; do not add as exemption without a very good reason."
         )
@@ -75,8 +74,14 @@ class TestOtelMetrics:
     @pytest.mark.parametrize(
         "invalid_stat_combo",
         [
-            *[param(("prefix", name), id=f"Stat name {msg}.") for (name, msg) in INVALID_STAT_NAME_CASES],
-            *[param((prefix, "name"), id=f"Stat prefix {msg}.") for (prefix, msg) in INVALID_STAT_NAME_CASES],
+            *[
+                pytest.param(("prefix", name), id=f"Stat name {msg}.")
+                for (name, msg) in INVALID_STAT_NAME_CASES
+            ],
+            *[
+                pytest.param((prefix, "name"), id=f"Stat prefix {msg}.")
+                for (prefix, msg) in INVALID_STAT_NAME_CASES
+            ],
         ],
     )
     def test_invalid_stat_names_are_caught(self, invalid_stat_combo):
@@ -90,7 +95,7 @@ class TestOtelMetrics:
         self.meter.assert_not_called()
 
     def test_old_name_exception_works(self, caplog):
-        name = "task_instance_created-OperatorNameWhichIsSuperLongAndExceedsTheOpenTelemetryCharacterLimit"
+        name = "task_instance_created_OperatorNameWhichIsSuperLongAndExceedsTheOpenTelemetryCharacterLimit"
         assert len(name) > OTEL_NAME_MAX_LENGTH
 
         with pytest.warns(MetricNameLengthExemptionWarning):
@@ -121,6 +126,7 @@ class TestOtelMetrics:
         self.stats.incr(name)
 
         assert self.map[full_name(name)].add.call_count == 2
+        self.meter.get_meter().create_counter.assert_called_once_with(name=full_name(name))
 
     @mock.patch("random.random", side_effect=[0.1, 0.9])
     def test_incr_with_rate_limit_works(self, mock_random, name):
@@ -174,9 +180,7 @@ class TestOtelMetrics:
     def test_gauge_new_metric(self, name):
         self.stats.gauge(name, value=1)
 
-        self.meter.get_meter().create_observable_gauge.assert_called_once_with(
-            name=full_name(name), callbacks=ANY
-        )
+        self.meter.get_meter().create_gauge.assert_called_once_with(name=full_name(name))
         assert self.map[full_name(name)].value == 1
 
     def test_gauge_new_metric_with_tags(self, name):
@@ -185,27 +189,21 @@ class TestOtelMetrics:
 
         self.stats.gauge(name, value=1, tags=tags)
 
-        self.meter.get_meter().create_observable_gauge.assert_called_once_with(
-            name=full_name(name), callbacks=ANY
-        )
+        self.meter.get_meter().create_gauge.assert_called_once_with(name=full_name(name))
         self.map[key].attributes == tags
 
     def test_gauge_existing_metric(self, name):
         self.stats.gauge(name, value=1)
         self.stats.gauge(name, value=2)
 
-        self.meter.get_meter().create_observable_gauge.assert_called_once_with(
-            name=full_name(name), callbacks=ANY
-        )
+        self.meter.get_meter().create_gauge.assert_called_once_with(name=full_name(name))
         assert self.map[full_name(name)].value == 2
 
     def test_gauge_existing_metric_with_delta(self, name):
         self.stats.gauge(name, value=1)
         self.stats.gauge(name, value=2, delta=True)
 
-        self.meter.get_meter().create_observable_gauge.assert_called_once_with(
-            name=full_name(name), callbacks=ANY
-        )
+        self.meter.get_meter().create_gauge.assert_called_once_with(name=full_name(name))
         assert self.map[full_name(name)].value == 3
 
     @mock.patch("random.random", side_effect=[0.1, 0.9])
@@ -227,13 +225,79 @@ class TestOtelMetrics:
 
         assert self.map[full_name(name)].value == 1
 
-    @mock.patch("warnings.warn")
-    def test_timer_warns_not_implemented(self, mock_warn):
-        class MessageContaining(str):
-            def __eq__(self, other):
-                return self in other
+    def test_timing_new_metric(self, name):
+        import datetime
 
-        with self.stats.timer():
-            mock_warn.assert_called_once_with(
-                MessageContaining("OpenTelemetry Timers are not yet implemented.")
-            )
+        self.stats.timing(name, dt=datetime.timedelta(seconds=123))
+
+        self.meter.get_meter().create_gauge.assert_called_once_with(name=full_name(name))
+        expected_value = 123000.0
+        assert self.map[full_name(name)].value == expected_value
+
+    def test_timing_new_metric_with_tags(self, name):
+        tags = {"hello": "world"}
+        key = _generate_key_name(full_name(name), tags)
+
+        self.stats.timing(name, dt=1, tags=tags)
+
+        self.meter.get_meter().create_gauge.assert_called_once_with(name=full_name(name))
+        self.map[key].attributes == tags
+
+    def test_timing_existing_metric(self, name):
+        self.stats.timing(name, dt=1)
+        self.stats.timing(name, dt=2)
+
+        self.meter.get_meter().create_gauge.assert_called_once_with(name=full_name(name))
+        assert self.map[full_name(name)].value == 2
+
+    # For the four test_timer_foo tests below:
+    #   time.perf_count() is called once to get the starting timestamp and again
+    #   to get the end timestamp.  timer() should return the difference as a float.
+
+    @mock.patch.object(time, "perf_counter", side_effect=[0.0, 3.14])
+    def test_timer_with_name_returns_float_and_stores_value(self, mock_time, name):
+        with self.stats.timer(name) as timer:
+            pass
+
+        assert isinstance(timer.duration, float)
+        expected_duration = 3140.0
+        assert timer.duration == expected_duration
+        assert mock_time.call_count == 2
+        self.meter.get_meter().create_gauge.assert_called_once_with(name=full_name(name))
+
+    @mock.patch.object(time, "perf_counter", side_effect=[0.0, 3.14])
+    def test_timer_no_name_returns_float_but_does_not_store_value(self, mock_time, name):
+        with self.stats.timer() as timer:
+            pass
+
+        assert isinstance(timer.duration, float)
+        expected_duration = 3140.0
+        assert timer.duration == expected_duration
+        assert mock_time.call_count == 2
+        self.meter.get_meter().create_gauge.assert_not_called()
+
+    @mock.patch.object(time, "perf_counter", side_effect=[0.0, 3.14])
+    def test_timer_start_and_stop_manually_send_false(self, mock_time, name):
+        timer = self.stats.timer(name)
+        timer.start()
+        # Perform some task
+        timer.stop(send=False)
+
+        assert isinstance(timer.duration, float)
+        expected_value = 3140.0
+        assert timer.duration == expected_value
+        assert mock_time.call_count == 2
+        self.meter.get_meter().create_gauge.assert_not_called()
+
+    @mock.patch.object(time, "perf_counter", side_effect=[0.0, 3.14])
+    def test_timer_start_and_stop_manually_send_true(self, mock_time, name):
+        timer = self.stats.timer(name)
+        timer.start()
+        # Perform some task
+        timer.stop(send=True)
+
+        assert isinstance(timer.duration, float)
+        expected_value = 3140.0
+        assert timer.duration == expected_value
+        assert mock_time.call_count == 2
+        self.meter.get_meter().create_gauge.assert_called_once_with(name=full_name(name))

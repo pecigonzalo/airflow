@@ -19,9 +19,11 @@
 """
 Module to update db migration information in Airflow
 """
+
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from checksumdir import dirhash
@@ -33,10 +35,21 @@ HASH_FILE = SVG_FILE.with_suffix(".sha256")
 
 MIGRATIONS_DIR = AIRFLOW_SOURCES_ROOT / "airflow" / "migrations"
 if __name__ == "__main__":
-    from eralchemy2 import render_er
+    console = Console(width=400, color_system="standard")
+    try:
+        from eralchemy2 import render_er
+    except ImportError:
+        if sys.platform == "darwin":
+            console.print(
+                "[red]Likely you have no graphviz installed[/]"
+                "Please install eralchemy2 package to run this script. "
+                "This will require to install graphviz, "
+                "and installing graphviz might be difficult for MacOS. Please follow: "
+                "https://pygraphviz.github.io/documentation/stable/install.html#macos ."
+            )
+        raise
 
-    console = Console(width=400)
-
+    console.print("[bright_blue]Preparing diagram for Airflow ERD")
     sha256hash = dirhash(
         MIGRATIONS_DIR, "sha256", excluded_extensions=["pyc"], ignore_hidden=True, include_paths=True
     )
@@ -53,7 +66,8 @@ if __name__ == "__main__":
         )
         HASH_FILE.write_text(sha256hash)
         host_os = os.environ.get("HOST_OS")
-        if host_os and host_os.lower() == "linux":
+        docker_is_rootless = os.environ.get("DOCKER_IS_ROOTLESS", "false") == "true"
+        if host_os and host_os.lower() == "linux" and not docker_is_rootless:
             try:
                 host_uid = int(os.environ["HOST_USER_ID"])
                 host_gid = int(os.environ["HOST_GROUP_ID"])
@@ -65,3 +79,7 @@ if __name__ == "__main__":
         console.print(f"[green]The diagram has been generated in {SVG_FILE}. Please commit the changes!")
     else:
         console.print("[green]Skip file generation as no files changes since last generation")
+        console.print(
+            f"[bright_blue]You can delete [magenta]{HASH_FILE.relative_to(AIRFLOW_SOURCES_ROOT)}[/] "
+            f"[bright_blue]to regenerate the diagrams.[/]"
+        )

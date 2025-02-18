@@ -37,13 +37,14 @@ ExternalTaskSensor times out. In this case, ExternalTaskSensor will raise Airflo
 or AirflowSensorTimeout exception
 
 """
+
 from __future__ import annotations
 
 import pendulum
 
-from airflow import DAG
-from airflow.operators.empty import EmptyOperator
-from airflow.sensors.external_task import ExternalTaskMarker, ExternalTaskSensor
+from airflow.models.dag import DAG
+from airflow.providers.standard.operators.empty import EmptyOperator
+from airflow.providers.standard.sensors.external_task import ExternalTaskMarker, ExternalTaskSensor
 
 start_date = pendulum.datetime(2021, 1, 1, tz="UTC")
 

@@ -25,16 +25,27 @@ import { useExtraLinks } from "src/api";
 interface Props {
   dagId: string;
   taskId: string;
-  executionDate: string;
+  logicalDate: string;
+  mapIndex?: number | undefined;
   extraLinks: string[];
+  tryNumber?: number | undefined;
 }
 
-const ExtraLinks = ({ dagId, taskId, executionDate, extraLinks }: Props) => {
+const ExtraLinks = ({
+  dagId,
+  taskId,
+  logicalDate,
+  mapIndex,
+  extraLinks,
+  tryNumber,
+}: Props) => {
   const { data: links } = useExtraLinks({
     dagId,
     taskId,
-    executionDate,
+    logicalDate,
+    mapIndex,
     extraLinks,
+    tryNumber,
   });
 
   if (!links?.length) return null;
@@ -42,18 +53,31 @@ const ExtraLinks = ({ dagId, taskId, executionDate, extraLinks }: Props) => {
   const isExternal = (url: string | null) =>
     url && /^(?:[a-z]+:)?\/\//.test(url);
 
+  const isSanitised = (url: string | null) => {
+    if (!url) {
+      return false; // Empty or null urls should cause the link to be disabled
+    }
+    const path = new URL(url, "http://localhost");
+    // Allow Absolute/Relative URL and prevent javascript:() from executing when passed as path.
+    // Example - `javascript:alert("Hi");`. Protocol for absolute and relative urls will either be `http:`/`https:`.
+    // Where as for javascript it will be `javascript:`.
+    if (path.protocol === "http:" || path.protocol === "https:") {
+      return true; // Absolute/Relative URLs are allowed
+    }
+    return false;
+  };
+
   return (
-    <Box mb={3}>
+    <Box my={3}>
       <Text as="strong">Extra Links</Text>
-      <Divider my={2} />
-      <Flex flexWrap="wrap">
+      <Flex flexWrap="wrap" mt={3}>
         {links.map(({ name, url }) => (
           <Button
             key={name}
             as={Link}
             colorScheme="blue"
             href={url}
-            isDisabled={!url}
+            isDisabled={!isSanitised(url)}
             target={isExternal(url) ? "_blank" : undefined}
             mr={2}
           >

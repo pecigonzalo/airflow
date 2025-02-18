@@ -53,7 +53,26 @@
         { "type": "integer" }
       ]
     },
-    "dataset": {
+    "asset_definition": {
+      "type": "object",
+      "properties": {
+        "uri": { "type": "string" },
+        "name": { "type": "string" },
+        "group": { "type": "string" },
+        "extra": {
+            "anyOf": [
+                {"type": "null"},
+                { "$ref": "#/definitions/dict" }
+            ]
+        },
+        "watchers": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/trigger" }
+        }
+      },
+      "required": [ "uri", "extra" ]
+    },
+    "asset": {
       "type": "object",
       "properties": {
         "uri": { "type": "string" },
@@ -66,20 +85,58 @@
       },
       "required": [ "uri", "extra" ]
     },
-    "typed_dataset": {
+    "typed_asset": {
       "type": "object",
       "properties": {
         "__type": {
           "type": "string",
-            "constant": "dataset"
+            "constant": "asset"
         },
-        "__var": { "$ref": "#/definitions/dataset" }
+        "__var": { "$ref": "#/definitions/asset" }
       },
       "required": [
         "__type",
         "__var"
       ],
       "additionalProperties": false
+    },
+    "typed_asset_cond": {
+      "type": "object",
+      "properties": {
+        "__type": {
+            "anyOf": [{
+                "type": "string",
+                "constant": "asset_or"
+            },
+            {
+                "type": "string",
+                "constant": "asset_and"
+            }
+            ]
+        },
+        "__var": {
+            "type": "array",
+            "items": {
+                "anyOf": [
+                    {"$ref": "#/definitions/typed_asset"},
+                    {    "$ref": "#/definitions/typed_asset_cond"}
+                    ]
+            }
+        }
+      },
+    "required": [
+        "__type",
+        "__var"
+        ],
+        "additionalProperties": false
+    },
+    "trigger": {
+      "type": "object",
+      "properties": {
+        "classpath": { "type": "string" },
+        "kwargs": { "$ref": "#/definitions/dict" }
+      },
+      "required": [ "classpath", "kwargs" ]
     },
     "dict": {
       "description": "A python dictionary containing values of any type",
@@ -106,22 +163,10 @@
     "dag": {
       "type": "object",
       "properties": {
-        "params": { "$ref": "#/definitions/params_dict" },
-        "_dag_id": { "type": "string" },
+        "params": { "$ref": "#/definitions/params" },
+        "dag_id": { "type": "string" },
         "tasks": {  "$ref": "#/definitions/tasks" },
         "timezone": { "$ref": "#/definitions/timezone" },
-        "schedule_interval": {
-          "anyOf": [
-            { "type": "null" },
-            { "type": "string" },
-            { "$ref": "#/definitions/typed_timedelta" },
-            { "$ref": "#/definitions/typed_relativedelta" }
-          ]
-        },
-        "dataset_triggers": {
-            "type": "array",
-            "items": { "$ref": "#/definitions/typed_dataset" }
-        },
         "owner_links": { "type": "object" },
         "timetable": {
           "type": "object",
@@ -131,32 +176,32 @@
           }
         },
         "catchup": { "type": "boolean" },
-        "is_subdag": { "type": "boolean" },
         "fileloc": { "type" : "string"},
+        "relative_fileloc": { "type" : "string"},
         "_processor_dags_folder": {
             "anyOf": [
                 { "type": "null" },
-                {"type": "string"}
+                { "type": "string" }
             ]
         },
-         "orientation": { "type" : "string"},
-        "_description": { "type" : "string"},
+        "dag_display_name": { "type" : "string"},
+        "description": { "type" : "string"},
         "_concurrency": { "type" : "number"},
-        "_max_active_tasks": { "type" : "number"},
+        "max_active_tasks": { "type" : "number"},
         "max_active_runs": { "type" : "number"},
+        "max_consecutive_failed_dag_runs": { "type" : "number"},
         "default_args": { "$ref": "#/definitions/dict" },
         "start_date": { "$ref": "#/definitions/datetime" },
         "end_date": { "$ref": "#/definitions/datetime" },
         "dagrun_timeout": { "$ref": "#/definitions/timedelta" },
         "doc_md": { "type" : "string"},
-        "_default_view": { "type" : "string"},
-        "_access_control": {"$ref": "#/definitions/dict" },
+        "access_control": {"$ref": "#/definitions/dict" },
         "is_paused_upon_creation":  { "type": "boolean" },
         "has_on_success_callback":  { "type": "boolean" },
         "has_on_failure_callback":  { "type": "boolean" },
         "render_template_as_native_obj":  { "type": "boolean" },
         "tags": { "type": "array" },
-        "_task_group": {"anyOf": [
+        "task_group": {"anyOf": [
           { "type": "null" },
           { "$ref": "#/definitions/task_group" }
         ]},
@@ -164,7 +209,7 @@
         "dag_dependencies": { "$ref": "#/definitions/dag_dependencies" }
       },
       "required": [
-        "_dag_id",
+        "dag_id",
         "fileloc",
         "tasks"
       ],
@@ -174,9 +219,13 @@
       "type": "array",
       "additionalProperties": { "$ref": "#/definitions/operator" }
     },
-    "params_dict": {
-      "type": "object",
-      "additionalProperties": {"$ref": "#/definitions/param" }
+    "params": {
+      "type": "array",
+      "prefixItems": [
+          { "type": "string" },
+          { "$ref": "#/definitions/param" }
+      ],
+      "unevaluatedItems": false
     },
     "param": {
       "$comment": "A param for a dag / operator",
@@ -196,7 +245,7 @@
       "$comment": "A task/operator in a DAG",
       "type": "object",
       "required": [
-        "_task_type",
+        "task_type",
         "_task_module",
         "task_id",
         "ui_color",
@@ -204,10 +253,11 @@
         "template_fields"
       ],
       "properties": {
-        "_task_type": { "type": "string" },
+        "task_type": { "type": "string" },
         "_task_module": { "type": "string" },
         "_operator_extra_links": { "$ref":  "#/definitions/extra_links" },
         "task_id": { "type": "string" },
+        "task_display_name": { "type": "string" },
         "label": { "type": "string" },
         "owner": { "type": "string" },
         "start_date": { "$ref": "#/definitions/datetime" },
@@ -225,9 +275,10 @@
         "retry_delay": { "$ref": "#/definitions/timedelta" },
         "retry_exponential_backoff": { "type": "boolean" },
         "max_retry_delay": { "$ref": "#/definitions/timedelta" },
-        "params": { "$ref": "#/definitions/params_dict" },
+        "params": { "$ref": "#/definitions/params" },
         "priority_weight": { "type": "number" },
         "weight_rule": { "type": "string" },
+        "executor": { "type": "string" },
         "executor_config": { "$ref": "#/definitions/dict" },
         "do_xcom_push": { "type": "boolean" },
         "ui_color": { "$ref": "#/definitions/color" },
@@ -236,26 +287,24 @@
           "type": "array",
           "items": { "type": "string" }
         },
-        "subdag": { "$ref": "#/definitions/dag" },
         "downstream_task_ids": {
           "type": "array",
           "items": { "type": "string" }
         },
         "_is_dummy": { "type": "boolean" },
-        "deps": {
-          "description": "list of dep classes -- if non-standard",
-          "type": "array",
-          "items": { "type": "string" },
-          "uniqueItems": true
-        },
         "doc":  { "type": "string" },
         "doc_md":  { "type": "string" },
         "doc_json":  { "type": "string" },
         "doc_yaml":  { "type": "string" },
         "doc_rst":  { "type": "string" },
+        "_logger_name": { "type": "string" },
+        "_log_config_logger_name": { "type": "string" },
         "_is_mapped": { "const": true, "$comment": "only present when True" },
+        "_is_sensor": { "const": true, "$comment": "only present when True" },
         "expand_input": { "type": "object" },
-        "partial_kwargs": { "type": "object" }
+        "partial_kwargs": { "type": "object" },
+        "map_index_template": { "type": "string" },
+        "allow_nested_operators": { "type": "boolean" }
       },
       "dependencies": {
         "expand_input": ["partial_kwargs", "_is_mapped"],
@@ -269,6 +318,7 @@
       "type": "object",
       "required": [
         "_group_id",
+        "group_display_name",
         "prefix_group_id",
         "children",
         "tooltip",
@@ -281,6 +331,7 @@
       ],
       "properties": {
         "_group_id": {"anyOf": [{"type": "null"}, { "type": "string" }]},
+        "group_display_name": {"type": "string" },
         "is_mapped": { "type": "boolean" },
         "prefix_group_id": { "type": "boolean" },
         "children":  { "$ref": "#/definitions/dict" },

@@ -58,26 +58,58 @@ tmux send-keys 'airflow scheduler' C-m
 
 tmux split-window -h
 tmux select-pane -t 2
+
+if [[ ! ${USE_AIRFLOW_VERSION=} =~ ^2\..*  ]]; then
+    if [[ ${DEV_MODE=} == "true" ]]; then
+        tmux send-keys 'airflow fastapi-api -d' C-m
+    else
+        tmux send-keys 'airflow fastapi-api' C-m
+    fi
+fi
+
+tmux split-window -h
+tmux select-pane -t 3
 if [[ ${DEV_MODE=} == "true" ]]; then
     tmux send-keys 'airflow webserver -d' C-m
 else
     tmux send-keys 'airflow webserver' C-m
 fi
-if python -c 'import sys; sys.exit(sys.version_info < (3, 7))'; then
-    tmux select-pane -t 0
-    tmux split-window -h
-    tmux send-keys 'airflow triggerer' C-m
-fi
+
+tmux select-pane -t 0
+tmux split-window -h
+tmux send-keys 'airflow triggerer' C-m
+
 if [[ ${INTEGRATION_CELERY} == "true" ]]; then
     tmux select-pane -t 0
     tmux split-window -h
     tmux send-keys 'airflow celery worker' C-m
 fi
-
 if [[ ${INTEGRATION_CELERY} == "true" && ${CELERY_FLOWER} == "true" ]]; then
     tmux select-pane -t 3
     tmux split-window -h
     tmux send-keys 'airflow celery flower' C-m
+fi
+if [[ ${AIRFLOW__CORE__EXECUTOR} == "airflow.providers.edge.executors.edge_executor.EdgeExecutor" ]]; then
+    tmux select-pane -t 0
+    tmux split-window -h
+
+    # Ensure we are not leaking any DB connection information to Edge Worker process
+    tmux send-keys 'unset AIRFLOW__DATABASE__SQL_ALCHEMY_CONN' C-m
+    tmux send-keys 'unset AIRFLOW__CELERY__RESULT_BACKEND' C-m
+    tmux send-keys 'unset POSTGRES_HOST_PORT' C-m
+    tmux send-keys 'unset BACKEND' C-m
+    tmux send-keys 'unset POSTGRES_VERSION' C-m
+
+    # Ensure logs are smelling like Remote and are not visible to other components
+    tmux send-keys 'export AIRFLOW__LOGGING__BASE_LOG_FOLDER=edge_logs' C-m
+
+    # Start Edge Worker and make a "breeze" hostname, let it pick only default queue
+    tmux send-keys 'airflow edge worker --edge-hostname breeze --queues default' C-m
+fi
+if [[ ${STANDALONE_DAG_PROCESSOR} == "true" ]]; then
+    tmux select-pane -t 3
+    tmux split-window -h
+    tmux send-keys 'airflow dag-processor' C-m
 fi
 
 # Attach Session, on the Main window

@@ -51,6 +51,10 @@ To check the health status of your Airflow instance, you can simply access the e
     "triggerer":{
       "status":"healthy",
       "latest_triggerer_heartbeat":"2018-12-26 17:16:12+00:00"
+    },
+    "dag_processor":{
+      "status":"healthy",
+      "latest_dag_processor_heartbeat":"2018-12-26 17:16:12+00:00"
     }
   }
 
@@ -70,6 +74,10 @@ To check the health status of your Airflow instance, you can simply access the e
   * The status of the ``triggerer`` behaves exactly like that of the ``scheduler`` as described above.
     Note that the ``status`` and ``latest_triggerer_heartbeat`` fields in the health check response will be null for
     deployments that do not include a ``triggerer`` component.
+
+  * The status of the ``dag_processor`` behaves exactly like that of the ``scheduler`` as described above.
+    Note that the ``status`` and ``latest_dag_processor_heartbeat`` fields in the health check response will be null for
+    deployments that do not include a ``dag_processor`` component.
 
 Please keep in mind that the HTTP response code of ``/health`` endpoint **should not** be used to determine the health
 status of the application. The return code is only indicative of the state of the rest call (200 for success).
@@ -108,7 +116,7 @@ To check if the local scheduler is still working properly, run:
 
 .. code-block:: bash
 
-    airflow jobs check --job-type SchedulerJob --hostname "$(hostname)"
+    airflow jobs check --job-type SchedulerJob --local
 
 To check if any scheduler is running when you are using high availability, run:
 
@@ -127,7 +135,7 @@ HTTP monitoring for Celery Cluster
 
 You can optionally use Flower to monitor the health of the Celery cluster. It also provides an HTTP API that you can use to build a health check for your environment.
 
-For details about installation, see: :ref:`executor:CeleryExecutor`. For details about usage, see: `The Flower project documentation <https://flower.readthedocs.io/>`__.
+For details about installation, see: :doc:`apache-airflow-providers-celery:celery_executor`. For details about usage, see: `The Flower project documentation <https://flower.readthedocs.io/>`__.
 
 CLI Check for Celery Workers
 ----------------------------
@@ -135,16 +143,21 @@ CLI Check for Celery Workers
 To verify that the Celery workers are working correctly, you can use the ``celery inspect ping`` command. On failure, the command will exit
 with a non-zero error code.
 
+.. note::
+
+  For this check to work, ``[celery]worker_enable_remote_control`` must be ``True``.
+  If the parameter is set to ``False``, the command will exit with a non-zero error code.
+
 To check if the worker running on the local host is working correctly, run:
 
 .. code-block:: bash
 
-    celery --app airflow.executors.celery_executor.app inspect ping -d celery@${HOSTNAME}
+    celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d celery@${HOSTNAME}
 
 To check if the all workers in the cluster running is working correctly, run:
 
 .. code-block:: bash
 
-    celery --app airflow.executors.celery_executor.app inspect ping
+    celery --app airflow.providers.celery.executors.celery_executor.app inspect ping
 
 For more information, see: `Management Command-line Utilities (inspect/control) <https://docs.celeryproject.org/en/stable/userguide/monitoring.html#monitoring-control>`__ and `Workers Guide <https://docs.celeryproject.org/en/stable/userguide/workers.html>`__ in the Celery documentation.

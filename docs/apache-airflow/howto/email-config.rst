@@ -53,7 +53,7 @@ Equivalent environment variables look like:
 
 To configure SMTP settings, checkout the :ref:`SMTP <config:smtp>` section in the standard configuration.
 If you do not want to store the SMTP credentials in the config or in the environment variables, you can create a
-connection called ``smtp_default`` of ``Email`` type, or choose a custom connection name and set the ``email_conn_id`` with it's name in
+connection called ``smtp_default`` of ``Email`` type, or choose a custom connection name and set the ``email_conn_id`` with its name in
 the configuration & store SMTP username-password in it. Other SMTP settings like host, port etc always gets picked up
 from the configuration only. The connection can be of any type (for example 'HTTP connection').
 
@@ -96,8 +96,6 @@ You can use the default airflow SMTP backend to send email with SendGrid
      smtp_host=smtp.sendgrid.net
      smtp_starttls=False
      smtp_ssl=False
-     smtp_user=apikey
-     smtp_password=<generated-api-key>
      smtp_port=587
      smtp_mail_from=<your-from-email>
 
@@ -108,8 +106,6 @@ Equivalent environment variables looks like
      AIRFLOW__SMTP__SMTP_HOST=smtp.sendgrid.net
      AIRFLOW__SMTP__SMTP_STARTTLS=False
      AIRFLOW__SMTP__SMTP_SSL=False
-     AIRFLOW__SMTP__SMTP_USER=apikey
-     AIRFLOW__SMTP__SMTP_PASSWORD=<generated-api-key>
      AIRFLOW__SMTP__SMTP_PORT=587
      AIRFLOW__SMTP__SMTP_MAIL_FROM=<your-from-email>
 

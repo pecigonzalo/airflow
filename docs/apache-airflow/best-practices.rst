@@ -23,7 +23,7 @@ Best Practices
 Creating a new DAG is a three-step process:
 
 - writing Python code to create a DAG object,
-- testing if the code meets our expectations,
+- testing if the code meets your expectations,
 - configuring environment dependencies to run your DAG
 
 This tutorial will introduce you to the best practices for these three steps.
@@ -82,7 +82,7 @@ it difficult to check the logs of that Task from the Webserver. If that is not d
 Communication
 --------------
 
-Airflow executes tasks of a DAG on different servers in case you are using :doc:`Kubernetes executor </core-concepts/executor/kubernetes>` or :doc:`Celery executor </core-concepts/executor/celery>`.
+Airflow executes tasks of a DAG on different servers in case you are using :doc:`Kubernetes executor <apache-airflow-providers-cncf-kubernetes:kubernetes_executor>` or :doc:`Celery executor <apache-airflow-providers-celery:celery_executor>`.
 Therefore, you should not store any file or config in the local filesystem as the next task is likely to run on a different server without access to it — for example, a task that downloads the data file that the next task processes.
 In the case of :class:`Local executor <airflow.executors.local_executor.LocalExecutor>`,
 storing a file on disk can make retries harder e.g., your task requires a config file that is deleted by another task in DAG.
@@ -104,7 +104,7 @@ and build DAG relations between them. This is because of the design decision for
 and the impact the top-level code parsing speed on both performance and scalability of Airflow.
 
 Airflow scheduler executes the code outside the Operator's ``execute`` methods with the minimum interval of
-:ref:`min_file_process_interval<config:scheduler__min_file_process_interval>` seconds. This is done in order
+:ref:`min_file_process_interval<config:dag_processor__min_file_process_interval>` seconds. This is done in order
 to allow dynamic scheduling of the DAGs - where scheduling and dependencies might change over time and
 impact the next schedule of the DAG. Airflow scheduler tries to continuously make sure that what you have
 in DAGs is correctly reflected in scheduled tasks.
@@ -115,10 +115,10 @@ One of the important factors impacting DAG loading time, that might be overlooke
 that top-level imports might take surprisingly a lot of time and they can generate a lot of overhead
 and this can be easily avoided by converting them to local imports inside Python callables for example.
 
-Consider the example below - the first DAG will parse significantly slower (in the orders of seconds)
-than equivalent DAG where the ``numpy`` module is imported as local import in the callable.
+Consider the two examples below. In the first example, DAG will take an additional 1000 seconds to parse
+than the functionally equivalent DAG in the second example where the ``expensive_api_call`` is executed from the context of its task.
 
-Bad example:
+Not avoiding top-level DAG code:
 
 .. code-block:: python
 
@@ -127,7 +127,13 @@ Bad example:
   from airflow import DAG
   from airflow.decorators import task
 
-  import numpy as np  # <-- THIS IS A VERY BAD IDEA! DON'T DO THAT!
+
+  def expensive_api_call():
+      print("Hello from Airflow!")
+      sleep(1000)
+
+
+  my_expensive_response = expensive_api_call()
 
   with DAG(
       dag_id="example_python_operator",
@@ -138,15 +144,10 @@ Bad example:
   ) as dag:
 
       @task()
-      def print_array():
-          """Print Numpy array."""
-          a = np.arange(15).reshape(3, 5)
-          print(a)
-          return a
+      def print_expensive_api_call():
+          print(my_expensive_response)
 
-      print_array()
-
-Good example:
+Avoiding top-level DAG code:
 
 .. code-block:: python
 
@@ -154,6 +155,12 @@ Good example:
 
   from airflow import DAG
   from airflow.decorators import task
+
+
+  def expensive_api_call():
+      sleep(1000)
+      return "Hello from Airflow!"
+
 
   with DAG(
       dag_id="example_python_operator",
@@ -164,19 +171,190 @@ Good example:
   ) as dag:
 
       @task()
-      def print_array():
-          """Print Numpy array."""
-          import numpy as np  # <- THIS IS HOW NUMPY SHOULD BE IMPORTED IN THIS CASE!
+      def print_expensive_api_call():
+          my_expensive_response = expensive_api_call()
+          print(my_expensive_response)
 
-          a = np.arange(15).reshape(3, 5)
-          print(a)
-          return a
+In the first example, ``expensive_api_call`` is executed each time the DAG file is parsed, which will result in suboptimal performance in the DAG file processing. In the second example, ``expensive_api_call`` is only called when the task is running and thus is able to be parsed without suffering any performance hits. To test it out yourself, implement the first DAG and see "Hello from Airflow!" printed in the scheduler logs!
 
-      print_array()
+Note that import statements also count as top-level code. So, if you have an import statement that takes a long time or the imported module itself executes code at the top-level, that can also impact the performance of the scheduler. The following example illustrates how to handle expensive imports.
 
-In the Bad example, NumPy is imported each time the DAG file is parsed, which will result in suboptimal performance in the DAG file processing. In the Good example, NumPy is only imported when the task is running.
+.. code-block:: python
+
+  # It's ok to import modules that are not expensive to load at top-level of a DAG file
+  import random
+  import pendulum
+
+  # Expensive imports should be avoided as top level imports, because DAG files are parsed frequently, resulting in top-level code being executed.
+  #
+  # import pandas
+  # import torch
+  # import tensorflow
+  #
+
+  ...
+
+
+  @task()
+  def do_stuff_with_pandas_and_torch():
+      import pandas
+      import torch
+
+      # do some operations using pandas and torch
+
+
+  @task()
+  def do_stuff_with_tensorflow():
+      import tensorflow
+
+      # do some operations using tensorflow
+
+
+How to check if my code is "top-level" code
+-------------------------------------------
+
+In order to understand whether your code is "top-level" or not you need to understand a lot of
+intricacies of how parsing Python works. In general, when Python parses the python file it executes
+the code it sees, except (in general) internal code of the methods that it does not execute.
+
+It has a number of special cases that are not obvious - for example top-level code also means
+any code that is used to determine default values of methods.
+
+However, there is an easy way to check whether your code is "top-level" or not. You simply need to
+parse your code and see if the piece of code gets executed.
+
+Imagine this code:
+
+.. code-block:: python
+
+  from airflow import DAG
+  from airflow.providers.standard.operators.python import PythonOperator
+  import pendulum
+
+
+  def get_task_id():
+      return "print_array_task"  # <- is that code going to be executed?
+
+
+  def get_array():
+      return [1, 2, 3]  # <- is that code going to be executed?
+
+
+  with DAG(
+      dag_id="example_python_operator",
+      schedule=None,
+      start_date=pendulum.datetime(2021, 1, 1, tz="UTC"),
+      catchup=False,
+      tags=["example"],
+  ) as dag:
+      operator = PythonOperator(
+          task_id=get_task_id(),
+          python_callable=get_array,
+          dag=dag,
+      )
+
+What you can do to check it is add some print statements to the code you want to check and then run
+``python <my_dag_file>.py``.
+
+
+.. code-block:: python
+
+  from airflow import DAG
+  from airflow.providers.standard.operators.python import PythonOperator
+  import pendulum
+
+
+  def get_task_id():
+      print("Executing 1")
+      return "print_array_task"  # <- is that code going to be executed? YES
+
+
+  def get_array():
+      print("Executing 2")
+      return [1, 2, 3]  # <- is that code going to be executed? NO
+
+
+  with DAG(
+      dag_id="example_python_operator",
+      schedule=None,
+      start_date=pendulum.datetime(2021, 1, 1, tz="UTC"),
+      catchup=False,
+      tags=["example"],
+  ) as dag:
+      operator = PythonOperator(
+          task_id=get_task_id(),
+          python_callable=get_array,
+          dag=dag,
+      )
+
+When you execute that code you will see:
+
+.. code-block:: bash
+
+    root@cf85ab34571e:/opt/airflow# python /files/test_python.py
+    Executing 1
+
+This means that the ``get_array`` is not executed as top-level code, but ``get_task_id`` is.
 
 .. _best_practices/dynamic_dag_generation:
+
+Code Quality and Linting
+------------------------
+
+Maintaining high code quality is essential for the reliability and maintainability of your Airflow workflows. Utilizing linting tools can help identify potential issues and enforce coding standards. One such tool is ``ruff``, a fast Python linter that now includes specific rules for Airflow.
+
+ruff assists in detecting deprecated features and patterns that may affect your migration to Airflow 3.0. For instance, it includes rules prefixed with ``AIR`` to flag potential issues:
+
+- **AIR301**: Flags DAGs without an explicit ``schedule`` argument.
+- **AIR302**: Identifies usage of deprecated ``schedule_interval`` parameter.
+- **AIR303**: Detects imports from modules that have been relocated or removed in Airflow 3.0.
+
+Installing and Using ruff
+-------------------------
+
+1. **Installation**: Install ``ruff`` using pip:
+
+   .. code-block:: bash
+
+      pip install "ruff>=0.9.5"
+
+2. **Running ruff**: Execute ``ruff`` to check your DAGs for potential issues:
+
+   .. code-block:: bash
+
+      ruff check dags/ --select AIR301,AIR302,AIR303
+
+   This command will analyze your DAGs located in the ``dags/`` directory and report any issues related to the specified rules.
+
+Example
+-------
+
+Given a legacy DAG defined as:
+
+.. code-block:: python
+
+   from airflow import dag
+   from airflow.datasets import Dataset
+   from airflow.sensors.filesystem import FileSensor
+
+
+   @dag()
+   def legacy_dag():
+       FileSensor(task_id="wait_for_file", filepath="/tmp/test_file")
+
+Running ``ruff`` will produce:
+
+.. code-block:: none
+
+   dags/legacy_dag.py:7:2: AIR301 DAG should have an explicit schedule argument
+   dags/legacy_dag.py:12:6: AIR302 schedule_interval is removed in Airflow 3.0
+   dags/legacy_dag.py:17:15: AIR302 airflow.datasets.Dataset is removed in Airflow 3.0
+   dags/legacy_dag.py:19:5: AIR303 airflow.sensors.filesystem.FileSensor is moved into ``standard`` provider in Airflow 3.0
+
+By integrating ``ruff`` into your development workflow, you can proactively address deprecations and maintain code quality, facilitating smoother transitions between Airflow versions.
+
+For more information on ``ruff`` and its integration with Airflow, refer to the `official Airflow documentation <https://airflow.apache.org/docs/apache-airflow/stable/best-practices.html>`_.
+
 
 Dynamic DAG Generation
 ----------------------
@@ -200,10 +378,13 @@ Some cases of dynamic DAG generation are described in the :doc:`howto/dynamic-da
 Airflow Variables
 -----------------
 
-As mentioned in the previous chapter, :ref:`best_practices/top_level_code`. you should avoid
-using Airflow Variables at top level Python code of DAGs. You can use the Airflow Variables freely inside the
-``execute()`` methods of the operators, but you can also pass the Airflow Variables to the existing operators
-via Jinja template, which will delay reading the value until the task execution.
+Using Airflow Variables yields network calls and database access, so their usage in top-level Python code for DAGs
+should be avoided as much as possible, as mentioned in the previous chapter, :ref:`best_practices/top_level_code`.
+If Airflow Variables must be used in top-level DAG code, then their impact on DAG parsing can be mitigated by
+:ref:`enabling the experimental cache<config:secrets__use_cache>`, configured with a sensible :ref:`ttl<config:secrets__cache_ttl_seconds>`.
+
+You can use the Airflow Variables freely inside the ``execute()`` methods of the operators, but you can also pass the
+Airflow Variables to the existing operators via Jinja template, which will delay reading the value until the task execution.
 
 The template syntax to do this is:
 
@@ -217,7 +398,11 @@ or if you need to deserialize a json object from the variable :
 
     {{ var.json.<variable_name> }}
 
-In top-level code, variables using jinja templates do not produce a request until a task is running, whereas, ``Variable.get()`` produces a request every time the dag file is parsed by the scheduler. Using ``Variable.get()`` will lead to suboptimal performance in the dag file processing. In some cases this can cause the dag file to timeout before it is fully parsed.
+In top-level code, variables using jinja templates do not produce a request until a task is running, whereas,
+``Variable.get()`` produces a request every time the dag file is parsed by the scheduler if caching is not enabled.
+Using ``Variable.get()`` without :ref:`enabling caching<config:secrets__use_cache>` will lead to suboptimal
+performance in the dag file processing.
+In some cases this can cause the dag file to timeout before it is fully parsed.
 
 Bad example:
 
@@ -225,20 +410,20 @@ Bad example:
 
     from airflow.models import Variable
 
-    foo_var = Variable.get("foo")  # DON'T DO THAT
+    foo_var = Variable.get("foo")  # AVOID THAT
     bash_use_variable_bad_1 = BashOperator(
         task_id="bash_use_variable_bad_1", bash_command="echo variable foo=${foo_env}", env={"foo_env": foo_var}
     )
 
     bash_use_variable_bad_2 = BashOperator(
         task_id="bash_use_variable_bad_2",
-        bash_command=f"echo variable foo=${Variable.get('foo')}",  # DON'T DO THAT
+        bash_command=f"echo variable foo=${Variable.get('foo')}",  # AVOID THAT
     )
 
     bash_use_variable_bad_3 = BashOperator(
         task_id="bash_use_variable_bad_3",
         bash_command="echo variable foo=${foo_env}",
-        env={"foo_env": Variable.get("foo")},  # DON'T DO THAT
+        env={"foo_env": Variable.get("foo")},  # AVOID THAT
     )
 
 
@@ -256,7 +441,7 @@ Good example:
 
   @task
   def my_task():
-      var = Variable.get("foo")  # this is fine, because func my_task called only run task, not scan DAGs.
+      var = Variable.get("foo")  # This is ok since my_task is called only during task run, not during DAG scan.
       print(var)
 
 For security purpose, you're recommended to use the :ref:`Secrets Backend<secrets_backend_configuration>`
@@ -315,16 +500,16 @@ at the following configuration parameters and fine tune them according your need
 each parameter by following the links):
 
 * :ref:`config:scheduler__scheduler_idle_sleep_time`
-* :ref:`config:scheduler__min_file_process_interval`
-* :ref:`config:scheduler__dag_dir_list_interval`
-* :ref:`config:scheduler__parsing_processes`
-* :ref:`config:scheduler__file_parsing_sort_mode`
+* :ref:`config:dag_processor__min_file_process_interval`
+* :ref:`config:dag_processor__refresh_interval`
+* :ref:`config:dag_processor__parsing_processes`
+* :ref:`config:dag_processor__file_parsing_sort_mode`
 
 Example of watcher pattern with trigger rules
 ---------------------------------------------
 
 The watcher pattern is how we call a DAG with a task that is "watching" the states of the other tasks.
-It's primary purpose is to fail a DAG Run when any other task fail.
+Its primary purpose is to fail a DAG Run when any other task fail.
 The need came from the Airflow system tests that are DAGs with different tasks (similarly like a test containing steps).
 
 Normally, when any task fails, all other tasks are not executed and the whole DAG Run gets failed status too. But
@@ -353,7 +538,7 @@ It's easier to grab the concept with an example. Let's say that we have the foll
     from airflow import DAG
     from airflow.decorators import task
     from airflow.exceptions import AirflowException
-    from airflow.operators.bash import BashOperator
+    from airflow.providers.standard.operators.bash import BashOperator
     from airflow.utils.trigger_rule import TriggerRule
 
 
@@ -393,6 +578,34 @@ We have several tasks that serve different purposes:
 It's important to note, that without ``watcher`` task, the whole DAG Run will get the ``success`` state, since the only failing task is not the leaf task, and the ``teardown`` task will finish with ``success``.
 If we want the ``watcher`` to monitor the state of all tasks, we need to make it dependent on all of them separately. Thanks to this, we can fail the DAG Run if any of the tasks fail. Note that the watcher task has a trigger rule set to ``"one_failed"``.
 On the other hand, without the ``teardown`` task, the ``watcher`` task will not be needed, because ``failing_task`` will propagate its ``failed`` state to downstream task ``passed_task`` and the whole DAG Run will also get the ``failed`` status.
+
+
+Using AirflowClusterPolicySkipDag exception in cluster policies to skip specific DAGs
+-------------------------------------------------------------------------------------
+
+.. versionadded:: 2.7
+
+Airflow DAGs can usually be deployed and updated with the specific branch of Git repository via ``git-sync``.
+But, when you have to run multiple Airflow clusters for some operational reasons, it's very cumbersome to maintain multiple Git branches.
+Especially, you have some difficulties when you need to synchronize two separate branches(like ``prod`` and ``beta``) periodically with proper branching strategy.
+
+- cherry-pick is too cumbersome to maintain Git repository.
+- hard-reset is not recommended way for GitOps
+
+So, you can consider connecting multiple Airflow clusters with same Git branch (like ``main``), and maintaining those with different environment variables and different connection configurations with same ``connection_id``.
+you can also raise :class:`~airflow.exceptions.AirflowClusterPolicySkipDag` exception on the cluster policy, to load specific DAGs to :class:`~airflow.models.dagbag.DagBag` on the specific Airflow deployment only, if needed.
+
+.. code-block:: python
+
+  def dag_policy(dag: DAG):
+      """Skipping the DAG with `only_for_beta` tag."""
+
+      if "only_for_beta" in dag.tags:
+          raise AirflowClusterPolicySkipDag(
+              f"DAG {dag.dag_id} is not loaded on the production cluster, due to `only_for_beta` tag."
+          )
+
+The example above, shows the ``dag_policy`` code snippet to skip the DAG depending on the tags it has.
 
 .. _best_practices/reducing_dag_complexity:
 
@@ -570,13 +783,14 @@ This is an example test want to verify the structure of a code-generated DAG aga
 
     from airflow import DAG
     from airflow.utils.state import DagRunState, TaskInstanceState
-    from airflow.utils.types import DagRunType
+    from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
     DATA_INTERVAL_START = pendulum.datetime(2021, 9, 13, tz="UTC")
     DATA_INTERVAL_END = DATA_INTERVAL_START + datetime.timedelta(days=1)
 
     TEST_DAG_ID = "my_custom_operator_dag"
     TEST_TASK_ID = "my_custom_operator_task"
+    TEST_RUN_ID = "my_custom_operator_dag_run"
 
 
     @pytest.fixture()
@@ -595,11 +809,13 @@ This is an example test want to verify the structure of a code-generated DAG aga
 
     def test_my_custom_operator_execute_no_trigger(dag):
         dagrun = dag.create_dagrun(
-            state=DagRunState.RUNNING,
-            execution_date=DATA_INTERVAL_START,
+            run_id=TEST_RUN_ID,
+            logical_date=DATA_INTERVAL_START,
             data_interval=(DATA_INTERVAL_START, DATA_INTERVAL_END),
-            start_date=DATA_INTERVAL_END,
             run_type=DagRunType.MANUAL,
+            triggered_by=DagRunTriggeredByType.TIMETABLE,
+            state=DagRunState.RUNNING,
+            start_date=DATA_INTERVAL_END,
         )
         ti = dagrun.get_task_instance(task_id=TEST_TASK_ID)
         ti.task = dag.get_task(task_id=TEST_TASK_ID)
@@ -669,7 +885,7 @@ For connection, use :envvar:`AIRFLOW_CONN_{CONN_ID}`.
     )
     conn_uri = conn.get_uri()
     with mock.patch.dict("os.environ", AIRFLOW_CONN_MY_CONN=conn_uri):
-        assert "cat" == Connection.get("my_conn").login
+        assert "cat" == Connection.get_connection_from_secrets("my_conn").login
 
 Metadata DB maintenance
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -736,7 +952,7 @@ of Airflow, or even that dependencies of several of your Custom Operators introd
 
 There are a number of strategies that can be employed to mitigate the problem. And while dealing with
 dependency conflict in custom operators is difficult, it's actually quite a bit easier when it comes to
-using :class:`airflow.operators.python.PythonVirtualenvOperator` or :class:`airflow.operators.python.ExternalPythonOperator`
+using :class:`airflow.providers.standard.operators.python.PythonVirtualenvOperator` or :class:`airflow.providers.standard.operators.python.ExternalPythonOperator`
 - either directly using classic "operator" approach or by using tasks decorated with
 ``@task.virtualenv`` or ``@task.external_python`` decorators if you use TaskFlow.
 
@@ -750,7 +966,7 @@ This is simplest to use and most limited strategy. The PythonVirtualenvOperator 
 create a virtualenv that your Python callable function will execute in. In the modern
 TaskFlow approach described in :doc:`/tutorial/taskflow`. this also can be done with decorating
 your callable with ``@task.virtualenv`` decorator (recommended way of using the operator).
-Each :class:`airflow.operators.python.PythonVirtualenvOperator` task can
+Each :class:`airflow.providers.standard.operators.python.PythonVirtualenvOperator` task can
 have its own independent Python virtualenv (dynamically created every time the task is run) and can
 specify fine-grained set of requirements that need to be installed for that task to execute.
 
@@ -798,7 +1014,7 @@ There are certain limitations and overhead introduced by this operator:
   that running tasks will still interfere with each other - for example subsequent tasks executed on the
   same worker might be affected by previous tasks creating/modifying files etc.
 
-You can see detailed examples of using :class:`airflow.operators.python.PythonVirtualenvOperator` in
+You can see detailed examples of using :class:`airflow.providers.standard.operators.python.PythonVirtualenvOperator` in
 :ref:`Taskflow Virtualenv example <taskflow/virtualenv_example>`
 
 
@@ -808,11 +1024,11 @@ Using ExternalPythonOperator
 .. versionadded:: 2.4
 
 A bit more involved but with significantly less overhead, security, stability problems is to use the
-:class:`airflow.operators.python.ExternalPythonOperator``. In the modern
+:class:`airflow.providers.standard.operators.python.ExternalPythonOperator``. In the modern
 TaskFlow approach described in :doc:`/tutorial/taskflow`. this also can be done with decorating
 your callable with ``@task.external_python`` decorator (recommended way of using the operator).
 It requires, however, that you have a pre-existing, immutable Python environment, that is prepared upfront.
-Unlike in :class:`airflow.operators.python.PythonVirtualenvOperator` you cannot add new dependencies
+Unlike in :class:`airflow.providers.standard.operators.python.PythonVirtualenvOperator` you cannot add new dependencies
 to such pre-existing environment. All dependencies you need should be added upfront in your environment
 and available in all the workers in case your Airflow runs in a distributed environment.
 
@@ -866,7 +1082,7 @@ after your DevOps/System Admin teams deploy your new dependencies in pre-existin
 The nice thing about this is that you can switch the decorator back at any time and continue
 developing it "dynamically" with ``PythonVirtualenvOperator``.
 
-You can see detailed examples of using :class:`airflow.operators.python.ExternalPythonOperator` in
+You can see detailed examples of using :class:`airflow.providers.standard.operators.python.ExternalPythonOperator` in
 :ref:`Taskflow External Python example <taskflow/external_python_example>`
 
 Using DockerOperator or Kubernetes Pod Operator

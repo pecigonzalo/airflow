@@ -18,10 +18,11 @@
 from __future__ import annotations
 
 import inspect
-import io
+import logging
 import os
 import re
 from contextlib import redirect_stdout
+from io import StringIO
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -31,12 +32,12 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.runtime.environment import EnvironmentContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import MetaData
+from sqlalchemy import Column, Integer, MetaData, Table, select
 
-from airflow.exceptions import AirflowException
 from airflow.models import Base as airflow_base
 from airflow.settings import engine
 from airflow.utils.db import (
+    LazySelectSequence,
     _get_alembic_config,
     check_migrations,
     compare_server_default,
@@ -49,6 +50,11 @@ from airflow.utils.db import (
     resetdb,
     upgradedb,
 )
+from airflow.utils.db_manager import RunDBManager
+
+from tests_common.test_utils.config import conf_vars
+
+pytestmark = pytest.mark.db_test
 
 
 class TestDb:
@@ -57,8 +63,14 @@ class TestDb:
 
         airflow.models.import_all_models()
         all_meta_data = MetaData()
-        for (table_name, table) in airflow_base.metadata.tables.items():
+        # Airflow DB
+        for table_name, table in airflow_base.metadata.tables.items():
             all_meta_data._add_table(table_name, table.schema, table)
+        # External DB Managers
+        external_db_managers = RunDBManager()
+        for dbmanager in external_db_managers._managers:
+            for table_name, table in dbmanager.metadata.tables.items():
+                all_meta_data._add_table(table_name, table.schema, table)
 
         # create diff between database schema and SQLAlchemy model
         mctx = MigrationContext.configure(
@@ -66,6 +78,7 @@ class TestDb:
             opts={"compare_type": compare_type, "compare_server_default": compare_server_default},
         )
         diff = compare_metadata(mctx, all_meta_data)
+
         # known diffs to ignore
         ignores = [
             # ignore tables created by celery
@@ -76,20 +89,16 @@ class TestDb:
             lambda t: (t[0] == "remove_index" and t[1].name == "taskset_id"),
             # from test_security unit test
             lambda t: (t[0] == "remove_table" and t[1].name == "some_model"),
-            # MSSQL default tables
-            lambda t: (t[0] == "remove_table" and t[1].name == "spt_monitor"),
-            lambda t: (t[0] == "remove_table" and t[1].name == "spt_fallback_db"),
-            lambda t: (t[0] == "remove_table" and t[1].name == "spt_fallback_usg"),
-            lambda t: (t[0] == "remove_table" and t[1].name == "MSreplication_options"),
-            lambda t: (t[0] == "remove_table" and t[1].name == "spt_fallback_dev"),
-            # MSSQL foreign keys where CASCADE has been removed
-            lambda t: (t[0] == "remove_fk" and t[1].name == "task_reschedule_dr_fkey"),
-            lambda t: (t[0] == "add_fk" and t[1].name == "task_reschedule_dr_fkey"),
             # Ignore flask-session table/index
             lambda t: (t[0] == "remove_table" and t[1].name == "session"),
             lambda t: (t[0] == "remove_index" and t[1].name == "session_id"),
+            lambda t: (t[0] == "remove_index" and t[1].name == "session_session_id_uq"),
             # sqlite sequence is used for autoincrementing columns created with `sqlite_autoincrement` option
             lambda t: (t[0] == "remove_table" and t[1].name == "sqlite_sequence"),
+            # fab version table
+            lambda t: (t[0] == "remove_table" and t[1].name == "alembic_version_fab"),
+            # Ignore _xcom_archive table
+            lambda t: (t[0] == "remove_table" and t[1].name == "_xcom_archive"),
         ]
 
         for ignore in ignores:
@@ -128,7 +137,8 @@ class TestDb:
     @mock.patch("alembic.command")
     def test_upgradedb(self, mock_alembic_command):
         upgradedb()
-        mock_alembic_command.upgrade.assert_called_once_with(mock.ANY, revision="heads")
+        mock_alembic_command.upgrade.assert_called_with(mock.ANY, revision="heads")
+        assert mock_alembic_command.upgrade.call_count == 2
 
     @pytest.mark.parametrize(
         "from_revision, to_revision",
@@ -137,7 +147,7 @@ class TestDb:
     def test_offline_upgrade_wrong_order(self, from_revision, to_revision):
         with mock.patch("airflow.utils.db.settings.engine.dialect"):
             with mock.patch("alembic.command.upgrade"):
-                with pytest.raises(ValueError, match="to.* revision .* older than .*from"):
+                with pytest.raises(ValueError, match="Error while checking history for revision range *:*"):
                     upgradedb(from_revision=from_revision, to_revision=to_revision, show_sql_only=True)
 
     @pytest.mark.parametrize(
@@ -149,48 +159,28 @@ class TestDb:
     def test_offline_upgrade_revision_nothing(self, from_revision, to_revision):
         with mock.patch("airflow.utils.db.settings.engine.dialect"):
             with mock.patch("alembic.command.upgrade"):
-                with redirect_stdout(io.StringIO()) as temp_stdout:
+                with redirect_stdout(StringIO()) as temp_stdout:
                     upgradedb(to_revision=to_revision, from_revision=from_revision, show_sql_only=True)
                 stdout = temp_stdout.getvalue()
                 assert "nothing to do" in stdout
 
-    @pytest.mark.parametrize(
-        "from_revision, to_revision",
-        [("90d1635d7b86", "54bebd308c5f"), ("e959f08ac86c", "587bdf053233")],
-    )
-    def test_offline_upgrade_revision(self, from_revision, to_revision):
-        with mock.patch("airflow.utils.db.settings.engine.dialect"):
-            with mock.patch("alembic.command.upgrade") as mock_alembic_upgrade:
-                upgradedb(from_revision=from_revision, to_revision=to_revision, show_sql_only=True)
-        mock_alembic_upgrade.assert_called_once_with(mock.ANY, f"{from_revision}:{to_revision}", sql=True)
-
     @mock.patch("airflow.utils.db._offline_migration")
     @mock.patch("airflow.utils.db._get_current_revision")
-    def test_offline_upgrade_no_versions(self, mock_gcr, mock_om):
+    def test_offline_upgrade_no_versions(self, mock_gcr, mock_om, caplog):
         """Offline upgrade should work with no version / revision options."""
         with mock.patch("airflow.utils.db.settings.engine.dialect") as dialect:
-            dialect.name = "postgresql"  # offline migration not supported with postgres
-            mock_gcr.return_value = "90d1635d7b86"
+            dialect.name = "postgresql"  # offline migration supported with postgres
+            mock_gcr.return_value = "22ed7efa9da2"
             upgradedb(from_revision=None, to_revision=None, show_sql_only=True)
             actual = mock_om.call_args.args[2]
-            assert re.match(r"90d1635d7b86:[a-z0-9]+", actual) is not None
+            assert re.match(r"22ed7efa9da2:[a-z0-9]+", actual) is not None
 
-    def test_offline_upgrade_fails_for_migration_less_than_2_0_0_head(self):
-        with mock.patch("airflow.utils.db.settings.engine.dialect"):
-            with pytest.raises(ValueError, match="Check that e1a11ece99cc is a valid revision"):
-                upgradedb(from_revision="e1a11ece99cc", to_revision="54bebd308c5f", show_sql_only=True)
-
-    def test_sqlite_offline_upgrade_raises_with_revision(self):
+    @mock.patch("airflow.utils.db._get_current_revision")
+    def test_sqlite_offline_upgrade_raises_with_revision(self, mock_gcr):
         with mock.patch("airflow.utils.db.settings.engine.dialect") as dialect:
             dialect.name = "sqlite"
-            with pytest.raises(AirflowException, match="Offline migration not supported for SQLite"):
-                upgradedb(from_revision="e1a11ece99cc", to_revision="54bebd308c5f", show_sql_only=True)
-
-    def test_offline_upgrade_fails_for_migration_less_than_2_2_0_head_for_mssql(self):
-        with mock.patch("airflow.utils.db.settings.engine.dialect") as dialect:
-            dialect.name = "mssql"
-            with pytest.raises(ValueError, match="Check that .* is a valid .* For dialect 'mssql'"):
-                upgradedb(from_revision="e1a11ece99cc", to_revision="54bebd308c5f", show_sql_only=True)
+            with pytest.raises(SystemExit, match="Offline migration not supported for SQLite"):
+                upgradedb(from_revision=None, to_revision=None, show_sql_only=True)
 
     @mock.patch("airflow.utils.db._offline_migration")
     def test_downgrade_sql_no_from(self, mock_om):
@@ -217,6 +207,10 @@ class TestDb:
         assert actual == "abc"
 
     @pytest.mark.parametrize("skip_init", [False, True])
+    @conf_vars(
+        {("database", "external_db_managers"): "airflow.providers.fab.auth_manager.models.db.FABDBManager"}
+    )
+    @mock.patch("airflow.providers.fab.auth_manager.models.db.FABDBManager")
     @mock.patch("airflow.utils.db.create_global_lock", new=MagicMock)
     @mock.patch("airflow.utils.db.drop_airflow_models")
     @mock.patch("airflow.utils.db.drop_airflow_moved_tables")
@@ -228,6 +222,7 @@ class TestDb:
         mock_init,
         mock_drop_moved,
         mock_drop_airflow,
+        mock_fabdb_manager,
         skip_init,
     ):
         session_mock = MagicMock()
@@ -238,6 +233,14 @@ class TestDb:
             mock_init.assert_not_called()
         else:
             mock_init.assert_called_once_with(session=session_mock)
+
+    def test_resetdb_logging_level(self):
+        unset_logging_level = logging.root.level
+        logging.root.setLevel(logging.DEBUG)
+        set_logging_level = logging.root.level
+        resetdb()
+        assert logging.root.level == set_logging_level
+        assert logging.root.level != unset_logging_level
 
     def test_alembic_configuration(self):
         with mock.patch.dict(
@@ -251,3 +254,16 @@ class TestDb:
         import airflow
 
         assert config.config_file_name == os.path.join(os.path.dirname(airflow.__file__), "alembic.ini")
+
+    def test_bool_lazy_select_sequence(self):
+        class MockSession:
+            def __init__(self):
+                pass
+
+            def scalar(self, stmt):
+                return None
+
+        t = Table("t", MetaData(), Column("id", Integer, primary_key=True))
+        lss = LazySelectSequence.from_select(select(t.c.id), order_by=[], session=MockSession())
+
+        assert bool(lss) is False

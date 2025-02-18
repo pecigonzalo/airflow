@@ -21,8 +21,31 @@ Setting Configuration Options
 =============================
 
 The first time you run Airflow, it will create a file called ``airflow.cfg`` in
-your ``$AIRFLOW_HOME`` directory (``~/airflow`` by default). This file contains Airflow's configuration and you
-can edit it to change any of the settings. You can also set options with environment variables by using this format:
+your ``$AIRFLOW_HOME`` directory (``~/airflow`` by default). This is in order to make it easy to
+"play" with airflow configuration.
+
+However, for production case you are advised to generate the configuration using command line:
+
+.. code-block:: bash
+
+    airflow config list --defaults
+
+This command will produce the output that you can copy to your configuration file and edit.
+
+It will contain all the default configuration options, with examples, nicely commented out
+so you need only un-comment and modify those that you want to change.
+This way you can easily keep track of all the configuration options that you changed from default
+and you can also easily upgrade your installation to new versions of Airflow when they come out and
+automatically use the defaults for existing options if they changed there.
+
+You can redirect it to your configuration file and edit it:
+
+.. code-block:: bash
+
+    airflow config list --defaults > "${AIRFLOW_HOME}/airflow.cfg"
+
+
+You can also set options with environment variables by using this format:
 :envvar:`AIRFLOW__{SECTION}__{KEY}` (note the double underscores).
 
 For example, the metadata database connection string can either be set in ``airflow.cfg`` like this:
@@ -43,7 +66,7 @@ For example consider the pretend section ``providers.some_provider``:
 
 .. code-block:: ini
 
-    [providers.some_provider>]
+    [providers.some_provider]
     this_param = true
 
 .. code-block:: bash
@@ -144,6 +167,36 @@ the example below.
     that you run airflow components on is synchronized (for example using ntpd) otherwise you might get
     "forbidden" errors when the logs are accessed.
 
+.. _set-config:configuring-local-settings:
+
+Configuring local settings
+==========================
+
+Some Airflow configuration is configured via local setting, because they require changes in the
+code that is executed when Airflow is initialized. Usually it is mentioned in the detailed documentation
+where you can configure such local settings - This is usually done in the ``airflow_local_settings.py`` file.
+
+You should create a ``airflow_local_settings.py`` file and put it in a directory in ``sys.path`` or
+in the ``$AIRFLOW_HOME/config`` folder. (Airflow adds ``$AIRFLOW_HOME/config`` to ``sys.path`` when
+Airflow is initialized)
+Starting from Airflow 2.10.1, the $AIRFLOW_HOME/dags folder is no longer included in sys.path at initialization, so any local settings in that folder will not be imported. Ensure that airflow_local_settings.py is located in a path that is part of sys.path during initialization, like $AIRFLOW_HOME/config.
+For more context about this change, see the `mailing list announcement <https://lists.apache.org/thread/b4fcw33vh60yfg9990n5vmc7sy2dcgjx>`_.
+
+You can see the example of such local settings here:
+
+.. py:module:: airflow.config_templates.airflow_local_settings
+
+Example settings you can configure this way:
+
+* :ref:`Cluster Policies <administration-and-deployment:cluster-policies-define>`
+* :ref:`Advanced logging configuration <write-logs-advanced>`
+* :ref:`Dag serialization <dag-serialization>`
+* :ref:`Pod mutation hook in Kubernetes Executor<kubernetes:pod_mutation_hook>`
+* :ref:`Control DAG parsing time <faq:how-to-control-dag-file-parsing-timeout>`
+* :ref:`Customize your UI <customizing-the-ui>`
+* :ref:`Configure more variables to export <export_dynamic_environment_variables>`
+* :ref:`Customize your DB configuration <set-up-database-backend>`
+
 
 Configuring Flask Application for Airflow Webserver
 ===================================================
@@ -155,3 +208,15 @@ and add any extra settings however by adding flask configuration to ``webserver_
 
 For example if you would like to change rate limit strategy to "moving window", you can set the
 ``RATELIMIT_STRATEGY`` to ``moving-window``.
+
+You could also enhance / modify the underlying flask app directly,
+as the `app context <https://flask.palletsprojects.com/en/2.3.x/appcontext/>`_ is pushed to ``webserver_config.py``:
+
+.. code-block:: python
+
+    from flask import current_app as app
+
+
+    @app.before_request
+    def print_custom_message() -> None:
+        print("Executing before every request")

@@ -16,11 +16,12 @@
 # specific language governing permissions and limitations
 # under the License.
 """Default configuration for the Airflow webserver."""
+
 from __future__ import annotations
 
 import os
 
-from airflow.www.fab_security.manager import AUTH_DB
+from flask_appbuilder.const import AUTH_DB
 
 # from airflow.www.fab_security.manager import AUTH_LDAP
 # from airflow.www.fab_security.manager import AUTH_OAUTH
@@ -35,7 +36,7 @@ WTF_CSRF_ENABLED = True
 WTF_CSRF_TIME_LIMIT = None
 
 # ----------------------------------------------------
-# AUTHENTICATION CONFIG
+# AUTHENTICATION CONFIG (specific to FAB auth manager)
 # ----------------------------------------------------
 # For details on how to set up each of the following authentication, see
 # http://flask-appbuilder.readthedocs.io/en/latest/security.html# authentication-methods

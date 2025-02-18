@@ -42,9 +42,7 @@
     : </label>
   </td>
   <td>
-    {% if "custom_html_form" in form_details.schema %}
-      {{ form_details.schema.custom_html_form | replace("{name}", "element_" + form_key) | replace("{value}", form_details.value) }}
-    {% elif "type" in form_details.schema and form_details.schema.type == "boolean" %}
+    {% if "type" in form_details.schema and form_details.schema.type == "boolean" %}
       <label for="element_{{ form_key }}" control-label="">
         <input class="switch-input" name="element_{{ form_key }}" id="element_{{ form_key }}" type="checkbox"
           {%- if form_details.value %} checked="checked"{%- endif -%}/>
@@ -86,7 +84,14 @@
         {% endfor -%}
       </select>
     {% elif form_details.schema and "array" in form_details.schema.type %}
-      {% if "examples" in form_details.schema and form_details.schema.examples %}
+      {% if "items" in form_details.schema and form_details.schema["items"] and ("type" not in form_details.schema["items"] or "string" not in form_details.schema["items"]["type"]) %}
+      <textarea class="form-control" name="element_{{ form_key }}" id="element_{{ form_key }}" valuetype="advancedarray" rows="6"
+        {%- if not "null" in form_details.schema.type %} required=""{% endif -%}>
+        {%- if form_details.value is sequence %}
+          {{- form_details.value | tojson() -}}
+        {% endif -%}
+      </textarea>
+      {% elif "examples" in form_details.schema and form_details.schema.examples %}
       <select multiple name="element_{{ form_key }}" id="element_{{ form_key }}" class="select2-drop-mask" valuetype="multiselect"
         onchange="updateJSONconf();"{% if not "null" in form_details.schema.type %} required=""{% endif %}>
         {% for option in form_details.schema.examples -%}
@@ -113,14 +118,23 @@
     {% elif form_details.schema and "object" in form_details.schema.type %}
       <textarea class="form-control" name="element_{{ form_key }}" id="element_{{ form_key }}" valuetype="object" rows="6"
         {%- if not "null" in form_details.schema.type %} required=""{% endif -%}>
-        {{- form_details.value | tojson() -}}
+        {%- if form_details.value %}
+          {{- form_details.value | tojson() -}}
+        {% endif -%}
       </textarea>
     {% elif form_details.schema and ("integer" in form_details.schema.type or "number" in form_details.schema.type) %}
-      <input class="form-control" name="element_{{ form_key }}" id="element_{{ form_key }}" valuetype="number" type="number"
-        value="{% if form_details.value %}{{ form_details.value }}{% endif %}"
+      <input class="form-control" name="element_{{ form_key }}" id="element_{{ form_key }}"
+             valuetype="number" {% if "integer" in form_details.schema.type %} type="number" {% else %} type="decimal" {% endif %}
+        value="{% if form_details.value is not none %}{{ form_details.value }}{% endif %}"
         {%- if form_details.schema.minimum %} min="{{ form_details.schema.minimum }}"{% endif %}
         {%- if form_details.schema.maximum %} max="{{ form_details.schema.maximum }}"{% endif %}
         {%- if form_details.schema.type and not "null" in form_details.schema.type %} required=""{% endif %} />
+    {% elif form_details.schema and "string" in form_details.schema.type and "format" in form_details.schema and form_details.schema.format == "multiline" %}
+      <textarea class="form-control" name="element_{{ form_key }}" id="element_{{ form_key }}" rows="6"
+        {%- if not "null" in form_details.schema.type %} required=""{% endif -%}
+        {%- if form_details.schema and form_details.schema.minLength %} minlength="{{ form_details.schema.minLength }}"{% endif %}
+        {%- if form_details.schema and form_details.schema.maxLength %} maxlength="{{ form_details.schema.maxLength }}"{% endif %}
+      >{% if form_details.value %}{{- form_details.value -}}{% endif %}</textarea>
     {% else %}
       <input class="form-control" name="element_{{ form_key }}" id="element_{{ form_key }}"
         type="{% if "examples" in form_details.schema and form_details.schema.examples %}search{% else %}text{% endif %}"
@@ -147,26 +161,14 @@
 {% block content %}
   {{ super() }}
   <h2>
-    Trigger DAG: <a href="{{ url_for('Airflow.'+ dag.get_default_view(), dag_id=dag.dag_id) }}">{{ dag.dag_id }}</a>
+    Trigger DAG: <a href="{{ url_for('Airflow.'+ dag.get_default_view(), dag_id=dag.dag_id) }}" title="{{ dag.dag_id }}">{{ dag.dag_display_name }}</a>
     <small class="text-muted">{{ dag.description[0:150] + '…' if dag.description and dag.description|length > 150 else dag.description|default('', true) }}</small>
   </h2>
-  {{ dag_docs(doc_md) }}
+  {{ dag_docs(doc_md, False) }}
   <form method="POST" id="trigger_form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="dag_id" value="{{ dag_id }}">
     <input type="hidden" name="origin" value="{{ origin }}">
-    <div class="form-group">
-      <label for="execution_date">Logical date</label>
-      <div class="input-group">
-        {{ form.execution_date(class_="form-control", disabled=False) }}
-      </div>
-    </div>
-    <div class="form-group row">
-      <div class="col-md-2">
-        <label for="run_id">Run id (Optional)</label>
-        <input type="text" class="form-control" placeholder="Run ID" name="run_id">
-      </div>
-    </div>
     {% if recent_confs|length > 0 %}
     <div class="form-group row">
       <div class="col-md-2">
@@ -235,12 +237,36 @@
           <div class="panel panel-default">
             <div class="panel-heading">
               <h4 class="panel-title">
-                <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion_json_conf" href="#accordion_json_conf_href" data-original-title="" title="" id="generated_json_toggle">Generated Configuration JSON<span class="caret"></span></a>
+                <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion_json_conf" href="#accordion_json_conf_href" data-original-title="" title="" id="generated_json_toggle">Generated Configuration JSON and Dagrun Options<span class="caret"></span></a>
               </h4>
             </div>
             <div id="accordion_json_conf_href" class="panel-collapse collapse">
               <div class="panel-body">
-                <textarea name="conf" id="json">{{ conf }}</textarea>
+                <table class="table table-hover table-bordered">
+                  <tbody>
+                    <tr>
+                      <td class="col-lg-2">
+                        <label for="logical_date" control-label="">Logical date:</label>
+                      </td>
+                      <td>
+                        {{ form.logical_date(class_="form-control", disabled=False) }}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="col-lg-2">
+                        <label for="run_id" control-label="">Run id:</label>
+                      </td>
+                      <td>
+                        <input type="text" class="form-control" placeholder="Run id, optional - will be generated if not provided" name="run_id" id="run_id"{% if run_id %}value="{{ run_id }}"{% endif %}>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colspan="2">
+                        <textarea name="conf" id="json">{{ conf }}</textarea>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -248,19 +274,22 @@
       </div>
     </div>
     {%- else %}
+    <div class="form-group">
+      <label for="logical_date">Logical date</label>
+      <div class="input-group">
+        {{ form.logical_date(class_="form-control", disabled=False) }}
+      </div>
+    </div>
+    <div class="form-group row">
+      <div class="col-md-2">
+        <label for="run_id">Run id (Optional)</label>
+        <input type="text" class="form-control" placeholder="Run ID" name="run_id"{% if run_id %}value="{{ run_id }}"{% endif %}>
+      </div>
+    </div>
     <label for="conf">Configuration JSON (Optional, must be a dict object)</label>
     <textarea class="form-control" name="conf" id="json">{{ conf }}</textarea>
     {%- endif %}
-    <p>
-      To access configuration in your DAG use <code>{{ '{{ dag_run.conf }}' }}</code>.
-      {% if is_dag_run_conf_overrides_params %}
-        As <code>core.dag_run_conf_overrides_params</code> is set to <code>True</code>, so passing any configuration
-        here will override task params which can be accessed via <code>{{ '{{ params }}' }}</code>.
-      {% else %}
-        As <code>core.dag_run_conf_overrides_params</code> is set to <code>False</code>, so passing any configuration
-        here won't override task params.
-      {% endif %}
-    </p>
+    {% if dag.get_is_paused() %}
     <div class="form-group">
       <label class="switch-label">
         <input class="switch-input" name="unpause" id="unpause" type="checkbox" checked>
@@ -268,6 +297,7 @@
         Unpause DAG when triggered
       </label>
     </div>
+    {% endif %}
     <button type="submit" class="btn btn-primary">Trigger</button>
     <a class="btn" href="{{ origin }}">Cancel</a>
   </form>

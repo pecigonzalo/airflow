@@ -17,16 +17,18 @@
 # under the License.
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 import tempfile
 from unittest import mock
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from airflow.exceptions import AirflowClusterPolicyViolation
-from tests.test_utils.config import conf_vars
+from airflow.exceptions import AirflowClusterPolicyViolation, AirflowConfigException
+
+from tests_common.test_utils.config import conf_vars
 
 SETTINGS_FILE_POLICY = """
 def test_policy(task_instance):
@@ -89,21 +91,42 @@ class TestLocalSettings:
         for mod in [m for m in sys.modules if m not in self.old_modules]:
             del sys.modules[mod]
 
+    @mock.patch("airflow.settings.prepare_syspath_for_config_and_plugins")
     @mock.patch("airflow.settings.import_local_settings")
-    @mock.patch("airflow.settings.prepare_syspath")
-    def test_initialize_order(self, prepare_syspath, import_local_settings):
+    @mock.patch("airflow.settings.prepare_syspath_for_dags_folder")
+    def test_initialize_order(
+        self,
+        mock_prepare_syspath_for_dags_folder,
+        mock_import_local_settings,
+        mock_prepare_syspath_for_config_and_plugins,
+    ):
         """
-        Tests that import_local_settings is called after prepare_classpath
+        Tests that import_local_settings is called between prepare_syspath_for_config_and_plugins
+        and prepare_syspath_for_dags_folder
         """
         mock_local_settings = mock.Mock()
-        mock_local_settings.attach_mock(prepare_syspath, "prepare_syspath")
-        mock_local_settings.attach_mock(import_local_settings, "import_local_settings")
+
+        mock_local_settings.attach_mock(
+            mock_prepare_syspath_for_config_and_plugins, "prepare_syspath_for_config_and_plugins"
+        )
+        mock_local_settings.attach_mock(mock_import_local_settings, "import_local_settings")
+        mock_local_settings.attach_mock(
+            mock_prepare_syspath_for_dags_folder, "prepare_syspath_for_dags_folder"
+        )
 
         import airflow.settings
 
         airflow.settings.initialize()
 
-        mock_local_settings.assert_has_calls([call.prepare_syspath(), call.import_local_settings()])
+        expected_calls = [
+            call.prepare_syspath_for_config_and_plugins(),
+            call.import_local_settings(),
+            call.prepare_syspath_for_dags_folder(),
+        ]
+
+        mock_local_settings.assert_has_calls(expected_calls)
+
+        assert mock_local_settings.mock_calls == expected_calls
 
     def test_import_with_dunder_all_not_specified(self):
         """
@@ -187,21 +210,15 @@ class TestLocalSettings:
 
 
 class TestUpdatedConfigNames:
-    @conf_vars(
-        {("webserver", "session_lifetime_days"): "5", ("webserver", "session_lifetime_minutes"): "43200"}
-    )
-    def test_updates_deprecated_session_timeout_config_val_when_new_config_val_is_default(self):
+    @conf_vars({("webserver", "session_lifetime_minutes"): "43200"})
+    def test_config_val_is_default(self):
         from airflow import settings
 
-        with pytest.warns(DeprecationWarning):
-            session_lifetime_config = settings.get_session_lifetime_config()
-            minutes_in_five_days = 5 * 24 * 60
-            assert session_lifetime_config == minutes_in_five_days
+        session_lifetime_config = settings.get_session_lifetime_config()
+        assert session_lifetime_config == 43200
 
-    @conf_vars(
-        {("webserver", "session_lifetime_days"): "5", ("webserver", "session_lifetime_minutes"): "43201"}
-    )
-    def test_uses_updated_session_timeout_config_when_val_is_not_default(self):
+    @conf_vars({("webserver", "session_lifetime_minutes"): "43201"})
+    def test_config_val_is_not_default(self):
         from airflow import settings
 
         session_lifetime_config = settings.get_session_lifetime_config()
@@ -214,3 +231,65 @@ class TestUpdatedConfigNames:
         session_lifetime_config = settings.get_session_lifetime_config()
         default_timeout_minutes = 30 * 24 * 60
         assert session_lifetime_config == default_timeout_minutes
+
+
+_local_db_path_error = pytest.raises(AirflowConfigException, match=r"Cannot use relative path:")
+
+
+@pytest.mark.parametrize(
+    ["value", "expectation"],
+    [
+        ("sqlite:///./relative_path.db", _local_db_path_error),
+        ("sqlite:///relative/path.db", _local_db_path_error),
+        pytest.param(
+            "sqlite:///C:/path/to/db",
+            _local_db_path_error,
+            marks=pytest.mark.skipif(sys.platform.startswith("win"), reason="Skip on Windows"),
+        ),
+        pytest.param(
+            r"sqlite:///C:\path\to\db",
+            _local_db_path_error,
+            marks=pytest.mark.skipif(sys.platform.startswith("win"), reason="Skip on Windows"),
+        ),
+        ("sqlite://", contextlib.nullcontext()),
+    ],
+)
+def test_sqlite_relative_path(value, expectation):
+    from airflow import settings
+
+    with (
+        patch("os.environ", {"_AIRFLOW_SKIP_DB_TESTS": "true"}),
+        patch("airflow.settings.SQL_ALCHEMY_CONN", value),
+        patch("airflow.settings.Session"),
+        patch("airflow.settings.engine"),
+    ):
+        with expectation:
+            settings.configure_orm()
+
+
+class TestEngineArgs:
+    @staticmethod
+    @patch("airflow.settings.conf")
+    @patch("airflow.settings.is_sqlalchemy_v1")
+    def test_encoding_present_in_v1(is_v1, mock_conf):
+        from airflow import settings
+
+        is_v1.return_value = True
+        mock_conf.getjson.return_value = {}
+
+        engine_args = settings.prepare_engine_args()
+
+        assert "encoding" in engine_args
+
+    @staticmethod
+    @patch("airflow.settings.conf")
+    @patch("airflow.settings.is_sqlalchemy_v1")
+    def test_encoding_absent_in_v2(is_v1, mock_conf):
+        from airflow import settings
+
+        is_v1.return_value = False
+        mock_conf.getjson.return_value = {}
+
+        engine_args = settings.prepare_engine_args()
+
+        assert "encoding" not in engine_args

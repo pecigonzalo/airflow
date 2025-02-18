@@ -20,16 +20,21 @@ from __future__ import annotations
 from unittest import mock
 
 import attr
+import pytest
 
 from airflow.lineage import AUTO, apply_lineage, get_backend, prepare_lineage
 from airflow.lineage.backend import LineageBackend
-from airflow.lineage.entities import File
 from airflow.models import TaskInstance as TI
-from airflow.operators.empty import EmptyOperator
+from airflow.providers.common.compat.lineage.entities import File
+from airflow.providers.standard.operators.empty import EmptyOperator
+from airflow.sdk.definitions.context import Context
 from airflow.utils import timezone
-from airflow.utils.context import Context
 from airflow.utils.types import DagRunType
-from tests.test_utils.config import conf_vars
+
+from tests_common.test_utils.config import conf_vars
+
+pytestmark = pytest.mark.db_test
+
 
 DEFAULT_DATE = timezone.datetime(2016, 1, 1)
 
@@ -123,7 +128,7 @@ class TestLineage:
         op1.inlets.append(file1)
         op1.outlets.append(file1)
 
-        # execution_date is set in the context in order to avoid creating task instances
+        # logical_date is set in the context in order to avoid creating task instances
         ctx1 = Context({"ti": TI(task=op1, run_id=dag_run.run_id), "ds": DEFAULT_DATE})
 
         op1.pre_execute(ctx1)
@@ -136,7 +141,7 @@ class TestLineage:
         f3s = "/tmp/does_not_exist_3"
         file3 = File(f3s)
 
-        with dag_maker(dag_id="test_prepare_lineage"):
+        with dag_maker(dag_id="test_prepare_lineage", start_date=DEFAULT_DATE):
             op1 = EmptyOperator(
                 task_id="leave1",
                 outlets=[a, file3],

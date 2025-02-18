@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from typing import NamedTuple
 
-from marshmallow import fields, post_dump, pre_load, validate
+from marshmallow import ValidationError, fields, post_dump, pre_load, validate, validates_schema
 from marshmallow.schema import Schema
 from marshmallow.validate import Range
 from marshmallow_sqlalchemy import SQLAlchemySchema, auto_field
@@ -32,7 +32,7 @@ from airflow.api_connexion.schemas.enum_schemas import DagStateField
 from airflow.models.dagrun import DagRun
 from airflow.utils import timezone
 from airflow.utils.state import DagRunState
-from airflow.utils.types import DagRunType
+from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 
 class ConfObject(fields.Field):
@@ -63,43 +63,39 @@ class DAGRunSchema(SQLAlchemySchema):
 
     run_id = auto_field(data_key="dag_run_id")
     dag_id = auto_field(dump_only=True)
-    execution_date = auto_field(data_key="logical_date", validate=validate_istimezone)
+    logical_date = auto_field(data_key="logical_date", allow_none=True, validate=validate_istimezone)
+    run_after = auto_field(data_key="run_after", validate=validate_istimezone)
     start_date = auto_field(dump_only=True)
     end_date = auto_field(dump_only=True)
     state = DagStateField(dump_only=True)
     external_trigger = auto_field(dump_default=True, dump_only=True)
     conf = ConfObject()
-    data_interval_start = auto_field(dump_only=True)
-    data_interval_end = auto_field(dump_only=True)
+    data_interval_start = auto_field(validate=validate_istimezone)
+    data_interval_end = auto_field(validate=validate_istimezone)
     last_scheduling_decision = auto_field(dump_only=True)
     run_type = auto_field(dump_only=True)
     note = auto_field(dump_only=False)
+    triggered_by = fields.Enum(DagRunTriggeredByType, by_value=True, dump_only=True)
 
     @pre_load
     def autogenerate(self, data, **kwargs):
-        """Auto generate run_id and logical_date if they are not provided.
+        """Auto generate run_id and run_after if they are not provided."""
+        run_after = data.get("run_after", _MISSING)
 
-        For compatibility, if `execution_date` is submitted, it is converted
-        to `logical_date`.
-        """
-        logical_date = data.get("logical_date", _MISSING)
-        execution_date = data.pop("execution_date", _MISSING)
-        if logical_date is execution_date is _MISSING:  # Both missing.
-            data["logical_date"] = str(timezone.utcnow())
-        elif logical_date is _MISSING:  # Only logical_date missing.
-            data["logical_date"] = execution_date
-        elif execution_date is _MISSING:  # Only execution_date missing.
-            pass
-        elif logical_date != execution_date:  # Both provided but don't match.
-            raise BadRequest(
-                "logical_date conflicts with execution_date",
-                detail=f"{logical_date!r} != {execution_date!r}",
-            )
+        # Auto-generate run_after if missing
+        if run_after is _MISSING:
+            data["run_after"] = str(timezone.utcnow())
 
         if "dag_run_id" not in data:
             try:
+                if logical_date_str := data.get("logical_date"):
+                    logical_date = timezone.parse(logical_date_str)
+                else:
+                    logical_date = None
                 data["dag_run_id"] = DagRun.generate_run_id(
-                    DagRunType.MANUAL, timezone.parse(data["logical_date"])
+                    run_type=DagRunType.MANUAL,
+                    logical_date=logical_date,
+                    run_after=timezone.parse(data["run_after"]),
                 )
             except (ParserError, TypeError) as err:
                 raise BadRequest("Incorrect datetime argument", detail=str(err))
@@ -107,9 +103,28 @@ class DAGRunSchema(SQLAlchemySchema):
 
     @post_dump
     def autofill(self, data, **kwargs):
-        """Populate execution_date from logical_date for compatibility."""
-        data["execution_date"] = data["logical_date"]
-        return data
+        """Ensure that only requested fields are returned if 'fields' context is set."""
+        ret_data = {}
+        if self.context.get("fields"):
+            ret_fields = self.context.get("fields")
+            for ret_field in ret_fields:
+                if ret_field not in data:
+                    raise ValueError(f"{ret_field} not in DAGRunSchema")
+                ret_data[ret_field] = data[ret_field]
+        else:
+            ret_data = data
+
+        return ret_data
+
+    @validates_schema
+    def validate_data_interval_dates(self, data, **kwargs):
+        data_interval_start_exists = data.get("data_interval_start") is not None
+        data_interval_end_exists = data.get("data_interval_end") is not None
+
+        if data_interval_start_exists != data_interval_end_exists:
+            raise ValidationError(
+                "Both 'data_interval_start' and 'data_interval_end' must be specified together"
+            )
 
 
 class SetDagRunStateFormSchema(Schema):

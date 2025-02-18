@@ -16,32 +16,29 @@
 # specific language governing permissions and limitations
 # under the License.
 """Authentication backend."""
+
 from __future__ import annotations
 
 import logging
 from importlib import import_module
 
 from airflow.configuration import conf
-from airflow.exceptions import AirflowConfigException, AirflowException
+from airflow.exceptions import AirflowException
 
 log = logging.getLogger(__name__)
 
 
 def load_auth():
     """Load authentication backends."""
-    auth_backends = "airflow.api.auth.backend.default"
-    try:
-        auth_backends = conf.get("api", "auth_backends")
-    except AirflowConfigException:
-        pass
+    auth_backends = conf.get("api", "auth_backends")
 
     backends = []
-    for backend in auth_backends.split(","):
-        try:
+    try:
+        for backend in auth_backends.split(","):
             auth = import_module(backend.strip())
             log.info("Loaded API auth backend: %s", backend)
             backends.append(auth)
-        except ImportError as err:
-            log.critical("Cannot import %s for API authentication due to: %s", backend, err)
-            raise AirflowException(err)
+    except ImportError as err:
+        log.critical("Cannot import %s for API authentication due to: %s", backend, err)
+        raise AirflowException(err)
     return backends

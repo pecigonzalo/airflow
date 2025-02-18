@@ -307,7 +307,7 @@ Below is an example of using the ``@task.docker`` decorator to run a Python task
 
 .. _taskflow/docker_example:
 
-.. exampleinclude:: /../../tests/system/providers/docker/example_taskflow_api_docker_virtualenv.py
+.. exampleinclude:: /../../providers/docker/tests/system/docker/example_taskflow_api_docker_virtualenv.py
     :language: python
     :dedent: 4
     :start-after: [START transform_docker]
@@ -338,7 +338,7 @@ Below is an example of using the ``@task.kubernetes`` decorator to run a Python 
 
 .. _taskflow/kubernetes_example:
 
-.. exampleinclude:: /../../tests/system/providers/cncf/kubernetes/example_kubernetes_decorator.py
+.. exampleinclude:: /../../providers/cncf/kubernetes/tests/system/cncf/kubernetes/example_kubernetes_decorator.py
     :language: python
     :dedent: 4
     :start-after: [START howto_operator_kubernetes]
@@ -360,11 +360,51 @@ Notes on using the operator:
 
 Using the TaskFlow API with Sensor operators
 --------------------------------------------
+
 You can apply the ``@task.sensor`` decorator to convert a regular Python function to an instance of the
 BaseSensorOperator class. The Python function implements the poke logic and returns an instance of
-the ``PokeReturnValue`` class as the ``poke()`` method in the BaseSensorOperator does. The ``PokeReturnValue`` is
-a new feature in Airflow 2.3 that allows a sensor operator to push an XCom value as described in
-section "Having sensors return XCOM values" of :doc:`apache-airflow-providers:howto/create-update-providers`.
+the ``PokeReturnValue`` class as the ``poke()`` method in the BaseSensorOperator does.
+In Airflow 2.3, sensor operators will be able to return XCOM values. This is achieved by returning
+an instance of the ``PokeReturnValue`` object at the end of the ``poke()`` method:
+
+  .. code-block:: python
+
+    from airflow.sensors.base import PokeReturnValue
+
+
+    class SensorWithXcomValue(BaseSensorOperator):
+        def poke(self, context: Context) -> Union[bool, PokeReturnValue]:
+            # ...
+            is_done = ...  # set to true if the sensor should stop poking.
+            xcom_value = ...  # return value of the sensor operator to be pushed to XCOM.
+            return PokeReturnValue(is_done, xcom_value)
+
+
+To implement a sensor operator that pushes a XCOM value and supports both version 2.3 and
+pre-2.3, you need to explicitly push the XCOM value if the version is pre-2.3.
+
+  .. code-block:: python
+
+    try:
+        from airflow.sensors.base import PokeReturnValue
+    except ImportError:
+        PokeReturnValue = None
+
+
+    class SensorWithXcomValue(BaseSensorOperator):
+        def poke(self, context: Context) -> bool:
+            # ...
+            is_done = ...  # set to true if the sensor should stop poking.
+            xcom_value = ...  # return value of the sensor operator to be pushed to XCOM.
+            if PokeReturnValue is not None:
+                return PokeReturnValue(is_done, xcom_value)
+            else:
+                if is_done:
+                    context["ti"].xcom_push(key="xcom_key", value=xcom_value)
+                return is_done
+
+
+
 
 Alternatively in cases where the sensor doesn't need to push XCOM values:  both ``poke()`` and the wrapped
 function can return a boolean-like value where ``True`` designates the sensor's operation as complete and
@@ -388,8 +428,8 @@ Tasks can also infer multiple outputs by using dict Python typing.
    def identity_dict(x: int, y: int) -> dict[str, int]:
        return {"x": x, "y": y}
 
-By using the typing ``Dict`` for the function return type, the ``multiple_outputs`` parameter
-is automatically set to true.
+By using the typing ``dict``, or any other class that conforms to the ``typing.Mapping`` protocol,
+for the function return type, the ``multiple_outputs`` parameter is automatically set to true.
 
 Note, If you manually set the ``multiple_outputs`` parameter the inference is disabled and
 the parameter value is used.
@@ -397,8 +437,8 @@ the parameter value is used.
 Adding dependencies between decorated and traditional tasks
 -----------------------------------------------------------
 The above tutorial shows how to create dependencies between TaskFlow functions. However, dependencies can also
-be set between traditional tasks (such as :class:`~airflow.operators.bash.BashOperator`
-or :class:`~airflow.sensors.filesystem.FileSensor`) and TaskFlow functions.
+be set between traditional tasks (such as :class:`~airflow.providers.standard.operators.bash.BashOperator`
+or :class:`~airflow.providers.standard.sensors.filesystem.FileSensor`) and TaskFlow functions.
 
 Building this dependency is shown in the code below:
 
@@ -413,6 +453,7 @@ Building this dependency is shown in the code below:
         """
         order_data_file = "/tmp/order_data.csv"
         order_data_df = pd.read_csv(order_data_file)
+        return order_data_df
 
 
     file_task = FileSensor(task_id="check_file", filepath="/tmp/order_data.csv")
@@ -425,7 +466,8 @@ In the above code block, a new TaskFlow function is defined as ``extract_from_fi
 reads the data from a known file location.
 In the main DAG, a new ``FileSensor`` task is defined to check for this file. Please note
 that this is a Sensor task which waits for the file.
-Finally, a dependency between this Sensor task and the TaskFlow function is specified.
+The TaskFlow function call is put in a variable ``order_data``.
+Finally, a dependency between this Sensor task and the TaskFlow function is specified using the variable.
 
 
 Consuming XComs between decorated and traditional tasks
@@ -457,13 +499,13 @@ To retrieve an XCom result for a key other than ``return_value``, you can use:
     Using the ``.output`` property as an input to another task is supported only for operator parameters
     listed as a ``template_field``.
 
-In the code example below, a :class:`~airflow.providers.http.operators.http.SimpleHttpOperator` result
+In the code example below, a :class:`~airflow.providers.http.operators.http.HttpOperator` result
 is captured via :doc:`XComs </core-concepts/xcoms>`. This XCom result, which is the task output, is then passed
 to a TaskFlow function which parses the response as JSON.
 
 .. code-block:: python
 
-    get_api_results_task = SimpleHttpOperator(
+    get_api_results_task = HttpOperator(
         task_id="get_api_results",
         endpoint="/api/query",
         do_xcom_push=True,
@@ -535,26 +577,34 @@ task to copy the same file to a date-partitioned storage location in S3 for long
         dest_bucket_key=f"""{BASE_PATH}/{"{{ execution_date.strftime('%Y/%m/%d') }}"}/{FILE_NAME}""",
     )
 
+.. _taskflow/accessing_context_variables:
+
 Accessing context variables in decorated tasks
 ----------------------------------------------
 
-When running your callable, Airflow will pass a set of keyword arguments that can be used in your
-function. This set of kwargs correspond exactly to what you can use in your Jinja templates.
-For this to work, you need to define ``**kwargs`` in your function header, or you can add directly the
-keyword arguments you would like to get - for example with the below code your callable will get
-the values of ``ti`` and ``next_ds`` context variables. Note that when explicit keyword arguments are used,
-they must be made optional in the function header to avoid ``TypeError`` exceptions during DAG parsing as
-these values are not available until task execution.
+When running your callable, Airflow will pass a set of keyword arguments that
+can be used in your function. This set of kwargs correspond exactly to what you
+can use in your Jinja templates. For this to work, you can add context keys you
+would like to receive in the function as keyword arguments.
 
-With explicit arguments:
+For example, the callable in the code block below will get values of the ``ti``
+and ``next_ds`` context variables:
 
 .. code-block:: python
 
    @task
-   def my_python_callable(ti=None, next_ds=None):
+   def my_python_callable(*, ti, next_ds):
        pass
 
-With kwargs:
+.. versionchanged:: 2.8
+    Previously the context key arguments must provide a default, e.g. ``ti=None``.
+    This is no longer needed.
+
+You can also choose to receive the entire context with ``**kwargs``. Note that
+this can incur a slight performance penalty since Airflow will need to
+expand the entire context that likely contains many things you don't actually
+need. It is therefore more recommended for you to use explicit arguments, as
+demonstrated in the previous paragraph.
 
 .. code-block:: python
 
@@ -569,7 +619,7 @@ method.
 
 .. code-block:: python
 
-    from airflow.operators.python import get_current_context
+    from airflow.providers.standard.operators.python import get_current_context
 
 
     def some_function_in_your_library():
@@ -579,6 +629,116 @@ method.
 Current context is accessible only during the task execution. The context is not accessible during
 ``pre_execute`` or ``post_execute``. Calling this method outside execution context will raise an error.
 
+Using templates in decorated tasks
+----------------------------------------------
+
+Arguments passed to your decorated function are automatically templated.
+
+You can also use the ``templates_exts`` parameter to template entire files.
+
+.. code-block:: python
+
+    @task(templates_exts=[".sql"])
+    def template_test(sql):
+        print(f"sql: {sql}")
+
+
+    template_test(sql="sql/test.sql")
+
+This will read the content of ``sql/test.sql`` and replace all template variables. You can also pass a list of files and all of them will be templated.
+
+You can pass additional parameters to the template engine through `the params parameter </concepts/params.html>`_.
+
+However, the ``params`` parameter must be passed to the decorator and not to your function directly, such as ``@task(templates_exts=['.sql'], params={'my_param'})`` and can then be used with ``{{ params.my_param }}`` in your templated files and function parameters.
+
+Alternatively, you can also pass it using the ``.override()`` method:
+
+.. code-block:: python
+
+    @task()
+    def template_test(input_var):
+        print(f"input_var: {input_var}")
+
+
+    template_test.override(params={"my_param": "wow"})(
+        input_var="my param is: {{ params.my_param }}",
+    )
+
+Finally, you can also manually render templates:
+
+.. code-block:: python
+
+    @task(params={"my_param": "wow"})
+    def template_test():
+        template_str = "run_id: {{ run_id }}; params.my_param: {{ params.my_param }}"
+
+        context = get_current_context()
+        rendered_template = context["task"].render_template(
+            template_str,
+            context,
+        )
+
+Here is a full example that demonstrates everything above:
+
+.. exampleinclude:: /../../airflow/example_dags/tutorial_taskflow_templates.py
+    :language: python
+    :start-after: [START tutorial]
+    :end-before: [END tutorial]
+
+Conditionally skipping tasks
+----------------------------
+
+The ``run_if()`` and ``skip_if()`` are syntactic sugar for TaskFlow
+that allows you to skip a ``Task`` based on a condition.
+You can use them to simply set execution conditions
+without changing the structure of the ``DAG`` or ``Task``.
+
+It also allows you to set conditions using ``Context``,
+which is essentially the same as using ``pre_execute``.
+
+An example usage of ``run_if()`` is as follows:
+
+.. code-block:: python
+
+    @task.run_if(lambda context: context["task_instance"].task_id == "run")
+    @task.bash()
+    def echo() -> str:
+        return "echo 'run'"
+
+The ``echo`` defined in the above code is only executed when the ``task_id`` is ``run``.
+
+If you want to leave a log when you skip a task, you have two options.
+
+.. tab-set::
+
+    .. tab-item:: Static message
+
+        .. code-block:: python
+
+            @task.run_if(lambda context: context["task_instance"].task_id == "run", skip_message="only task_id is 'run'")
+            @task.bash()
+            def echo() -> str:
+                return "echo 'run'"
+
+    .. tab-item:: using Context
+
+        .. code-block:: python
+
+            @task.run_if(
+                lambda context: (context["task_instance"].task_id == "run", f"{context['ts']}: only task_id is 'run'")
+            )
+            @task.bash()
+            def echo() -> str:
+                return "echo 'run'"
+
+There is also a ``skip_if()`` that works the opposite of ``run_if()``, and is used in the same way.
+
+.. code-block:: python
+
+    @task.skip_if(lambda context: context["task_instance"].task_id == "skip")
+    @task.bash()
+    def echo() -> str:
+        return "echo 'run'"
 
 What's Next?
 ------------

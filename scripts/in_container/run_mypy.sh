@@ -22,13 +22,16 @@ export PYTHONPATH=${AIRFLOW_SOURCES}
 
 ADDITIONAL_MYPY_OPTIONS=()
 
+export MYPY_FORCE_COLOR=true
+export TERM=ansi
+
 if [[ ${SUSPENDED_PROVIDERS_FOLDERS=} != "" ]];
 then
     for folder in ${SUSPENDED_PROVIDERS_FOLDERS=}
     do
         ADDITIONAL_MYPY_OPTIONS+=(
-            "--exclude" "airflow/providers/${folder}/*"
-            "--exclude" "tests/providers/${folder}/*"
+            "--exclude" "providers/${folder}/src/airflow/providers/${folder}/*"
+            "--exclude" "providers/${folder}/tests/${folder}/*"
         )
     done
 fi

@@ -20,10 +20,11 @@ from __future__ import annotations
 import os
 import re
 import time
+from contextlib import suppress
 
 import psutil
 import pytest
-from psutil import Error
+from psutil import Error, NoSuchProcess
 from rich.console import Console
 
 from airflow.cli import cli_parser
@@ -32,8 +33,7 @@ from airflow.utils.cli import setup_locations
 console = Console(width=400, color_system="standard")
 
 
-class _ComonCLIGunicornTestClass:
-
+class _CommonCLIGunicornTestClass:
     main_process_regexp: str = "process_to_look_for"
 
     @pytest.fixture(autouse=True)
@@ -55,16 +55,19 @@ class _ComonCLIGunicornTestClass:
         if airflow_internal_api_pids or gunicorn_pids:
             console.print("[blue]Some processes are still running")
             for pid in gunicorn_pids + airflow_internal_api_pids:
-                console.print(psutil.Process(pid).as_dict(attrs=["pid", "name", "cmdline"]))
+                with suppress(NoSuchProcess):
+                    console.print(psutil.Process(pid).as_dict(attrs=["pid", "name", "cmdline"]))
             console.print("[blue]Here list of processes ends")
             if airflow_internal_api_pids:
                 console.print(f"[yellow]Forcefully killing {self.main_process_regexp} processes")
                 for pid in airflow_internal_api_pids:
-                    psutil.Process(pid).kill()
+                    with suppress(NoSuchProcess):
+                        psutil.Process(pid).kill()
             if gunicorn_pids:
                 console.print("[yellow]Forcefully killing all gunicorn processes")
                 for pid in gunicorn_pids:
-                    psutil.Process(pid).kill()
+                    with suppress(NoSuchProcess):
+                        psutil.Process(pid).kill()
             if not ignore_running:
                 raise AssertionError(
                     "Background processes are running that prevent the test from passing successfully."
@@ -143,3 +146,13 @@ class _ComonCLIGunicornTestClass:
                     console.print(proc.as_dict(attrs=["pid", "name", "cmdline"]))
                 pids.append(proc.pid)
         return pids
+
+    def _terminate_multiple_process(self, pid_list):
+        process = []
+        for pid in pid_list:
+            proc = psutil.Process(pid)
+            proc.terminate()
+            process.append(proc)
+        gone, alive = psutil.wait_procs(process, timeout=120)
+        for p in alive:
+            p.kill()

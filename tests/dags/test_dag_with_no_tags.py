@@ -18,8 +18,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from airflow.models import DAG
-from airflow.operators.empty import EmptyOperator
+from airflow.models.dag import DAG
+from airflow.providers.standard.operators.empty import EmptyOperator
 
 DEFAULT_DATE = datetime(2016, 1, 1)
 

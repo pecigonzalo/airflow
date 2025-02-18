@@ -43,10 +43,15 @@ There are three main types of cluster policy:
 The DAG and Task cluster policies can raise the  :class:`~airflow.exceptions.AirflowClusterPolicyViolation`
 exception to indicate that the dag/task they were passed is not compliant and should not be loaded.
 
+They can also raise the :class:`~airflow.exceptions.AirflowClusterPolicySkipDag` exception
+when skipping that DAG is needed intentionally. Unlike :class:`~airflow.exceptions.AirflowClusterPolicyViolation`,
+this exception is not displayed on the Airflow web UI (Internally, it's not recorded on ``import_error`` table on meta database.)
+
 Any extra attributes set by a cluster policy take priority over those defined in your DAG file; for example,
 if you set an ``sla`` on your Task in the DAG file, and then your cluster policy also sets an ``sla``, the
 cluster policy's value will take precedence.
 
+.. _administration-and-deployment:cluster-policies-define:
 
 How do define a policy function
 -------------------------------
@@ -57,13 +62,15 @@ There are two ways to configure cluster policies:
    under your $AIRFLOW_HOME is a good "default" location) and then add callables to the file matching one or more
    of the cluster policy names above (e.g. ``dag_policy``).
 
+See :ref:`Configuring local settings <set-config:configuring-local-settings>` for details on how to
+configure local settings.
+
+
 2. By using a
    `setuptools entrypoint <https://packaging.python.org/guides/creating-and-discovering-plugins/#using-package-metadata>`_
    in a custom module using the `Pluggy <https://pluggy.readthedocs.io/en/stable/>`_ interface.
 
    .. versionadded:: 2.6
-
-   .. note:: |experimental|
 
    This method is more advanced and for people who are already comfortable with python packaging.
 
@@ -160,6 +167,9 @@ For example, your ``airflow_local_settings.py`` might follow this pattern:
         :language: python
         :start-after: [START example_list_of_cluster_policy_rules]
         :end-before: [END example_list_of_cluster_policy_rules]
+
+See :ref:`Configuring local settings <set-config:configuring-local-settings>` for details on how to
+configure local settings.
 
 
 Task instance mutation

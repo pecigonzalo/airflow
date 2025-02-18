@@ -20,12 +20,13 @@ Example usage of the TriggerDagRunOperator. This example holds 2 DAGs:
 1. 1st DAG (example_trigger_controller_dag) holds a TriggerDagRunOperator, which will trigger the 2nd DAG
 2. 2nd DAG (example_trigger_target_dag) which will be triggered by the TriggerDagRunOperator in the 1st DAG
 """
+
 from __future__ import annotations
 
 import pendulum
 
-from airflow import DAG
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.models.dag import DAG
+from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
 
 with DAG(
     dag_id="example_trigger_controller_dag",

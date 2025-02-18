@@ -25,7 +25,7 @@ Core Airflow provides an interface FileTaskHandler, which writes task logs to fi
 services (:doc:`apache-airflow-providers:index`) and some of them provide handlers that extend the logging
 capability of Apache Airflow. You can see all of these providers in :doc:`apache-airflow-providers:core-extensions/logging`.
 
-When using S3, GCS, WASB or OSS remote logging service, you can delete the local log files after
+When using S3, GCS, WASB, HDFS or OSS remote logging service, you can delete the local log files after
 they are uploaded to the remote location, by setting the config:
 
 .. code-block:: ini
@@ -82,6 +82,47 @@ This is the usual way loggers are used directly in Python code:
   logger = logging.getLogger(__name__)
   logger.info("This is a log message")
 
+Grouping of log lines
+---------------------
+
+.. versionadded:: 2.9.0
+
+Like CI pipelines also Airflow logs can be quite large and become hard to read. Sometimes therefore it is useful to group sections of log areas
+and provide folding of text areas to hide non relevant content. Airflow therefore implements a compatible log message grouping like
+`Github <https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines>`_ and
+`Azure DevOps <https://learn.microsoft.com/en-us/azure/devops/pipelines/scripts/logging-commands?view=azure-devops&tabs=powershell#formatting-commands>`_
+such that areas of text can be folded. The implemented scheme is compatible such that tools making output in CI can leverage the same experience
+in Airflow directly.
+
+By adding log markers with the starting and ending positions like for example below log messages can be grouped:
+
+.. code-block:: python
+
+   print("Here is some standard text.")
+   print("::group::Non important details")
+   print("bla")
+   print("debug messages...")
+   print("::endgroup::")
+   print("Here is again some standard text.")
+
+When displaying the logs in web UI, the display of logs will be condensed:
+
+.. code-block:: text
+
+   [2024-03-08, 23:30:18 CET] {logging_mixin.py:188} INFO - Here is some standard text.
+   [2024-03-08, 23:30:18 CET] {logging_mixin.py:188} ⯈ Non important details
+   [2024-03-08, 23:30:18 CET] {logging_mixin.py:188} INFO - Here is again some standard text.
+
+If you click on the log text label, the detailed log lies will be displayed.
+
+.. code-block:: text
+
+   [2024-03-08, 23:30:18 CET] {logging_mixin.py:188} INFO - Here is some standard text.
+   [2024-03-08, 23:30:18 CET] {logging_mixin.py:188} ⯆ Non important details
+   [2024-03-08, 23:30:18 CET] {logging_mixin.py:188} INFO - bla
+   [2024-03-08, 23:30:18 CET] {logging_mixin.py:188} INFO - debug messages...
+   [2024-03-08, 23:30:18 CET] {logging_mixin.py:188} ⯅⯅⯅ Log group end
+   [2024-03-08, 23:30:18 CET] {logging_mixin.py:188} INFO - Here is again some standard text.
 
 Interleaving of logs
 --------------------
@@ -103,7 +144,7 @@ the example below.
     $ airflow info
 
     Apache Airflow
-    version                | 2.7.0.dev0
+    version                | 2.9.0.dev0
     executor               | LocalExecutor
     task_logging_handler   | airflow.utils.log.file_task_handler.FileTaskHandler
     sql_alchemy_conn       | postgresql+psycopg2://postgres:airflow@postgres/airflow
@@ -117,53 +158,12 @@ the example below.
 The output of ``airflow info`` above is truncated to only display the section that pertains to the logging configuration.
 You can also run ``airflow config list`` to check that the logging configuration options have valid values.
 
-.. _write-logs-advanced:
-
 Advanced configuration
 ----------------------
 
-Not all configuration options are available from the ``airflow.cfg`` file. Some configuration options require
-that the logging config class be overwritten. This can be done via the ``logging_config_class`` option
-in ``airflow.cfg`` file. This option should specify the import path to a configuration compatible with
-:func:`logging.config.dictConfig`. If your file is a standard import location, then you should set a :envvar:`PYTHONPATH` environment variable.
-
-Follow the steps below to enable custom logging config class:
-
-#. Start by setting environment variable to known directory e.g. ``~/airflow/``
-
-    .. code-block:: bash
-
-        export PYTHONPATH=~/airflow/
-
-#. Create a directory to store the config file e.g. ``~/airflow/config``
-#. Create file called ``~/airflow/config/log_config.py`` with following the contents:
-
-    .. code-block:: python
-
-      from copy import deepcopy
-      from airflow.config_templates.airflow_local_settings import DEFAULT_LOGGING_CONFIG
-
-      LOGGING_CONFIG = deepcopy(DEFAULT_LOGGING_CONFIG)
-
-#.  At the end of the file, add code to modify the default dictionary configuration.
-#. Update ``$AIRFLOW_HOME/airflow.cfg`` to contain:
-
-    .. code-block:: ini
-
-        [logging]
-        remote_logging = True
-        logging_config_class = log_config.LOGGING_CONFIG
-
-#. Restart the application.
-
-See :doc:`../modules_management` for details on how Python and Airflow manage modules.
-
-External Links
---------------
-
-When using remote logging, you can configure Airflow to show a link to an external UI within the Airflow Web UI. Clicking the link redirects you to the external UI.
-
-Some external systems require specific configuration in Airflow for redirection to work but others do not.
+You can configure :doc:`advanced features </administration-and-deployment/logging-monitoring/advanced-logging-configuration>`
+- including adding your own custom task log handlers (but also log handlers for all airflow components), and creating
+custom log handlers per operators, hooks and tasks.
 
 .. _serving-worker-trigger-logs:
 
@@ -197,3 +197,10 @@ To accomplish this we have a few attributes that may be set on the handler, eith
 - ``trigger_should_queue``: Controls whether the triggerer should put a QueueListener between the event loop and the handler, to ensure blocking IO in the handler does not disrupt the event loop.
 - ``trigger_send_end_marker``: Controls whether an END signal should be sent to the logger when trigger completes. It is used to tell the wrapper to close and remove the individual file handler specific to the trigger that just completed.
 - ``trigger_supported``: If ``trigger_should_wrap`` and ``trigger_should_queue`` are not True, we generally assume that the handler does not support triggers.  But if in this case the handler has ``trigger_supported`` set to True, then we'll still move the handler to root at triggerer start so that it will process trigger messages.  Essentially, this should be true for handlers that "natively" support triggers. One such example of this is the StackdriverTaskHandler.
+
+External Links
+--------------
+
+When using remote logging, you can configure Airflow to show a link to an external UI within the Airflow Web UI. Clicking the link redirects you to the external UI.
+
+Some external systems require specific configuration in Airflow for redirection to work but others do not.

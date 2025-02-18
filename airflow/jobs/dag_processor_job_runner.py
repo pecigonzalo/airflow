@@ -17,19 +17,20 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
-from airflow.dag_processing.manager import DagFileProcessorManager
 from airflow.jobs.base_job_runner import BaseJobRunner
 from airflow.jobs.job import Job, perform_heartbeat
+from airflow.stats import Stats
 from airflow.utils.log.logging_mixin import LoggingMixin
 
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
-def empty_callback(_: Any) -> None:
-    pass
+    from airflow.dag_processing.manager import DagFileProcessorManager
 
 
-class DagProcessorJobRunner(BaseJobRunner[Job], LoggingMixin):
+class DagProcessorJobRunner(BaseJobRunner, LoggingMixin):
     """
     DagProcessorJobRunner is a job runner that runs a DagFileProcessorManager processor.
 
@@ -50,14 +51,14 @@ class DagProcessorJobRunner(BaseJobRunner[Job], LoggingMixin):
         self.processor = processor
         self.processor.heartbeat = lambda: perform_heartbeat(
             job=self.job,
-            heartbeat_callback=empty_callback,
+            heartbeat_callback=self.heartbeat_callback,
             only_if_necessary=True,
         )
 
     def _execute(self) -> int | None:
         self.log.info("Starting the Dag Processor Job")
         try:
-            self.processor.start()
+            self.processor.run()
         except Exception:
             self.log.exception("Exception when executing DagProcessorJob")
             raise
@@ -65,3 +66,6 @@ class DagProcessorJobRunner(BaseJobRunner[Job], LoggingMixin):
             self.processor.terminate()
             self.processor.end()
         return None
+
+    def heartbeat_callback(self, session: Session | None = None) -> None:
+        Stats.incr("dag_processor_heartbeat", 1, 1)

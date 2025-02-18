@@ -26,6 +26,8 @@ from airflow.models import XCom
 from airflow.sensors.base import PokeReturnValue
 from airflow.utils.state import State
 
+pytestmark = pytest.mark.db_test
+
 
 class TestSensorDecorator:
     def test_sensor_fails_on_none_python_callable(self, dag_maker):
@@ -44,13 +46,13 @@ class TestSensorDecorator:
         def dummy_f():
             pass
 
-        with dag_maker():
+        with dag_maker(serialized=True):
             sf = sensor_f()
             df = dummy_f()
             sf >> df
 
         dr = dag_maker.create_dagrun()
-        sf.operator.run(start_date=dr.execution_date, end_date=dr.execution_date, ignore_ti_state=True)
+        sf.operator.run(start_date=dr.logical_date, end_date=dr.logical_date, ignore_ti_state=True)
         tis = dr.get_task_instances()
         assert len(tis) == 2
         for ti in tis:
@@ -72,13 +74,13 @@ class TestSensorDecorator:
         def dummy_f():
             pass
 
-        with dag_maker():
+        with dag_maker(serialized=True):
             sf = sensor_f()
             df = dummy_f()
             sf >> df
 
         dr = dag_maker.create_dagrun()
-        sf.operator.run(start_date=dr.execution_date, end_date=dr.execution_date, ignore_ti_state=True)
+        sf.operator.run(start_date=dr.logical_date, end_date=dr.logical_date, ignore_ti_state=True)
         tis = dr.get_task_instances()
         assert len(tis) == 2
         for ti in tis:
@@ -96,14 +98,14 @@ class TestSensorDecorator:
         def dummy_f():
             pass
 
-        with dag_maker():
+        with dag_maker(serialized=True):
             sf = sensor_f()
             df = dummy_f()
             sf >> df
 
         dr = dag_maker.create_dagrun()
         with pytest.raises(AirflowSensorTimeout):
-            sf.operator.run(start_date=dr.execution_date, end_date=dr.execution_date, ignore_ti_state=True)
+            sf.operator.run(start_date=dr.logical_date, end_date=dr.logical_date, ignore_ti_state=True)
 
         tis = dr.get_task_instances()
         assert len(tis) == 2
@@ -122,14 +124,14 @@ class TestSensorDecorator:
         def dummy_f():
             pass
 
-        with dag_maker():
+        with dag_maker(serialized=True):
             sf = sensor_f()
             df = dummy_f()
             sf >> df
 
         dr = dag_maker.create_dagrun()
         with pytest.raises(AirflowSensorTimeout):
-            sf.operator.run(start_date=dr.execution_date, end_date=dr.execution_date, ignore_ti_state=True)
+            sf.operator.run(start_date=dr.logical_date, end_date=dr.logical_date, ignore_ti_state=True)
 
         tis = dr.get_task_instances()
         assert len(tis) == 2
@@ -148,13 +150,13 @@ class TestSensorDecorator:
         def dummy_f():
             pass
 
-        with dag_maker():
+        with dag_maker(serialized=True):
             sf = sensor_f()
             df = dummy_f()
             sf >> df
 
         dr = dag_maker.create_dagrun()
-        sf.operator.run(start_date=dr.execution_date, end_date=dr.execution_date, ignore_ti_state=True)
+        sf.operator.run(start_date=dr.logical_date, end_date=dr.logical_date, ignore_ti_state=True)
         tis = dr.get_task_instances()
         assert len(tis) == 2
         for ti in tis:
@@ -172,13 +174,13 @@ class TestSensorDecorator:
         def dummy_f():
             pass
 
-        with dag_maker():
+        with dag_maker(serialized=True):
             sf = sensor_f()
             df = dummy_f()
             sf >> df
 
         dr = dag_maker.create_dagrun()
-        sf.operator.run(start_date=dr.execution_date, end_date=dr.execution_date, ignore_ti_state=True)
+        sf.operator.run(start_date=dr.logical_date, end_date=dr.logical_date, ignore_ti_state=True)
         tis = dr.get_task_instances()
         assert len(tis) == 2
         for ti in tis:
@@ -200,13 +202,13 @@ class TestSensorDecorator:
             assert n == ret_val
             return PokeReturnValue(is_done=True, xcom_value=sensor_xcom_value)
 
-        with dag_maker():
+        with dag_maker(serialized=True):
             uf = upstream_f()
             sf = sensor_f(uf)
 
         dr = dag_maker.create_dagrun()
-        uf.operator.run(start_date=dr.execution_date, end_date=dr.execution_date, ignore_ti_state=True)
-        sf.operator.run(start_date=dr.execution_date, end_date=dr.execution_date)
+        uf.operator.run(start_date=dr.logical_date, end_date=dr.logical_date, ignore_ti_state=True)
+        sf.operator.run(start_date=dr.logical_date, end_date=dr.logical_date)
         tis = dr.get_task_instances()
         assert len(tis) == 2
         for ti in tis:

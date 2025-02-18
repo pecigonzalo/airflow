@@ -18,6 +18,14 @@
  */
 
 import type { CamelCase } from "type-fest";
+import type {
+  ElkExtendedEdge,
+  ElkEdgeSection,
+  ElkLabel,
+  ElkPoint,
+  ElkShape,
+  LayoutOptions,
+} from "elkjs";
 import type * as API from "./api-generated";
 
 type RunState = "success" | "running" | "queued" | "failed";
@@ -26,13 +34,13 @@ type TaskState =
   | RunState
   | "removed"
   | "scheduled"
-  | "shutdown"
   | "restarting"
   | "up_for_retry"
   | "up_for_reschedule"
   | "upstream_failed"
   | "skipped"
   | "deferred"
+  | "none"
   | null;
 
 interface Dag {
@@ -46,9 +54,9 @@ interface Dag {
 
 interface DagRun {
   runId: string;
-  runType: "manual" | "backfill" | "scheduled" | "dataset_triggered";
+  runType: "manual" | "backfill" | "scheduled" | "asset_triggered";
   state: RunState;
-  executionDate: string;
+  logicalDate: string;
   dataIntervalStart: string;
   dataIntervalEnd: string;
   queuedAt: string | null;
@@ -57,7 +65,6 @@ interface DagRun {
   lastSchedulingDecision: string | null;
   externalTrigger: boolean;
   conf: string | null;
-  confIsJson: boolean;
   note: string | null;
 }
 
@@ -70,6 +77,7 @@ interface TaskInstance {
   mappedStates?: {
     [key: string]: number;
   };
+  queuedDttm?: string | null;
   mapIndex?: number;
   tryNumber?: number;
   triggererJob?: Job;
@@ -96,29 +104,52 @@ interface Task {
   extraLinks?: string[];
   isMapped?: boolean;
   operator?: string;
-  hasOutletDatasets?: boolean;
+  hasOutletAssets?: boolean;
   triggerRule?: API.TriggerRule;
+  setupTeardownType?: "setup" | "teardown";
 }
 
-type RunOrdering = (
-  | "dataIntervalStart"
-  | "executionDate"
-  | "dataIntervalEnd"
-)[];
+type RunOrdering = ("dataIntervalStart" | "logicalDate" | "dataIntervalEnd")[];
+
+export interface MidEdge {
+  id: string;
+  sources: string[];
+  targets: string[];
+  isSetupTeardown: boolean | undefined;
+  parentNode: string | undefined;
+  labels: {
+    id: string;
+    text: string;
+    height: number;
+    width: number;
+  }[];
+}
 
 interface DepNode {
   id: string;
   value: {
     id?: string;
-    class: "dag" | "dataset" | "trigger" | "sensor";
+    class:
+      | "dag"
+      | "asset"
+      | "trigger"
+      | "sensor"
+      | "or-gate"
+      | "and-gate"
+      | "asset-alias";
     label: string;
-    rx: number;
-    ry: number;
+    rx?: number;
+    ry?: number;
     isOpen?: boolean;
     isJoinNode?: boolean;
     childCount?: number;
+    labelStyle?: string;
+    style?: string;
+    setupTeardownType?: "setup" | "teardown";
+    isMapped?: boolean;
   };
   children?: DepNode[];
+  edges?: MidEdge[];
 }
 
 interface DepEdge {
@@ -126,8 +157,40 @@ interface DepEdge {
   target: string;
 }
 
-interface DatasetListItem extends API.Dataset {
-  lastDatasetUpdate: string | null;
+export interface EdgeData {
+  rest: {
+    isSelected: boolean;
+    sources: string[];
+    targets: string[];
+    sections: ElkEdgeSection[];
+    junctionPoints?: ElkPoint[];
+    id: string;
+    labels?: ElkLabel[];
+    layoutOptions?: LayoutOptions;
+    isSetupTeardown?: boolean;
+    parentNode?: string;
+    isZoomedOut?: boolean;
+    isSourceAsset?: boolean;
+  };
+}
+
+export interface NodeType extends ElkShape {
+  value: DepNode["value"];
+  children?: NodeType[];
+  edges?: ElkExtendedEdge[];
+}
+
+export interface WebserverEdge {
+  label?: string;
+  sourceId: string;
+  targetId: string;
+  isSetupTeardown?: boolean;
+  parentNode?: string;
+  isSourceAsset?: boolean;
+}
+
+interface AssetListItem extends API.Asset {
+  lastAssetUpdate: string | null;
   totalUpdates: number;
 }
 
@@ -161,7 +224,7 @@ export type {
   API,
   Dag,
   DagRun,
-  DatasetListItem,
+  AssetListItem,
   DepEdge,
   DepNode,
   HistoricalMetricsData,

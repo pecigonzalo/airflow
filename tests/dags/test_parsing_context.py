@@ -20,11 +20,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from airflow.models.dag import DAG
-from airflow.operators.empty import EmptyOperator
-from airflow.utils.context import Context
-from airflow.utils.dag_parsing_context import (
+from airflow.providers.standard.operators.empty import EmptyOperator
+from airflow.sdk.definitions.context import (
     _AIRFLOW_PARSING_CONTEXT_DAG_ID,
     _AIRFLOW_PARSING_CONTEXT_TASK_ID,
+    Context,
 )
 from airflow.utils.timezone import datetime
 
@@ -45,6 +45,6 @@ class DagWithParsingContext(EmptyOperator):
         self.log.info("Executed")
 
 
-dag1 = DAG(dag_id="test_parsing_context", start_date=datetime(2015, 1, 1))
+dag1 = DAG(dag_id="test_parsing_context", schedule=None, start_date=datetime(2015, 1, 1))
 
 dag1_task1 = DagWithParsingContext(task_id="task1", dag=dag1, owner="airflow")

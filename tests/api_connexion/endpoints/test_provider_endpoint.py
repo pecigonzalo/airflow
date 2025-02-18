@@ -16,67 +16,59 @@
 # under the License.
 from __future__ import annotations
 
-from collections import OrderedDict
 from unittest import mock
 
 import pytest
 
 from airflow.providers_manager import ProviderInfo
-from airflow.security import permissions
-from tests.test_utils.api_connexion_utils import create_user, delete_user
 
-MOCK_PROVIDERS = OrderedDict(
-    [
-        (
-            "apache-airflow-providers-amazon",
-            ProviderInfo(
-                "1.0.0",
-                {
-                    "package-name": "apache-airflow-providers-amazon",
-                    "name": "Amazon",
-                    "description": "`Amazon Web Services (AWS) <https://aws.amazon.com/>`__.\n",
-                    "versions": ["1.0.0"],
-                },
-                "package",
-            ),
-        ),
-        (
-            "apache-airflow-providers-apache-cassandra",
-            ProviderInfo(
-                "1.0.0",
-                {
-                    "package-name": "apache-airflow-providers-apache-cassandra",
-                    "name": "Apache Cassandra",
-                    "description": "`Apache Cassandra <http://cassandra.apache.org/>`__.\n",
-                    "versions": ["1.0.0"],
-                },
-                "package",
-            ),
-        ),
-    ]
-)
+from tests_common.test_utils.api_connexion_utils import create_user, delete_user
+
+pytestmark = pytest.mark.db_test
+
+MOCK_PROVIDERS = {
+    "apache-airflow-providers-amazon": ProviderInfo(
+        "1.0.0",
+        {
+            "package-name": "apache-airflow-providers-amazon",
+            "name": "Amazon",
+            "description": "`Amazon Web Services (AWS) <https://aws.amazon.com/>`__.\n",
+            "versions": ["1.0.0"],
+        },
+        "package",
+    ),
+    "apache-airflow-providers-apache-cassandra": ProviderInfo(
+        "1.0.0",
+        {
+            "package-name": "apache-airflow-providers-apache-cassandra",
+            "name": "Apache Cassandra",
+            "description": "`Apache Cassandra <http://cassandra.apache.org/>`__.\n",
+            "versions": ["1.0.0"],
+        },
+        "package",
+    ),
+}
 
 
 @pytest.fixture(scope="module")
 def configured_app(minimal_app_for_api):
     app = minimal_app_for_api
     create_user(
-        app,  # type: ignore
+        app,
         username="test",
-        role_name="Test",
-        permissions=[(permissions.ACTION_CAN_READ, permissions.RESOURCE_PROVIDER)],
+        role_name="admin",
     )
-    create_user(app, username="test_no_permissions", role_name="TestNoPermissions")  # type: ignore
+    create_user(app, username="test_no_permissions", role_name=None)
 
     yield app
 
-    delete_user(app, username="test")  # type: ignore
-    delete_user(app, username="test_no_permissions")  # type: ignore
+    delete_user(app, username="test")
+    delete_user(app, username="test_no_permissions")
 
 
 class TestBaseProviderEndpoint:
     @pytest.fixture(autouse=True)
-    def setup_attrs(self, configured_app) -> None:
+    def setup_attrs(self, configured_app, cleanup_providers_manager) -> None:
         self.app = configured_app
         self.client = self.app.test_client()  # type:ignore
 

@@ -18,11 +18,11 @@
  */
 
 /* global document, window, $ */
-import { escapeHtml } from "./main";
+import { AnsiUp } from "ansi_up";
 import { getMetaValue } from "./utils";
 import { formatDateTime } from "./datetime_utils";
 
-const executionDate = getMetaValue("execution_date");
+const logicalDate = getMetaValue("logical_date");
 const dagId = getMetaValue("dag_id");
 const taskId = getMetaValue("task_id");
 const mapIndex = getMetaValue("map_index");
@@ -31,12 +31,15 @@ const DELAY = parseInt(getMetaValue("delay"), 10);
 const AUTO_TAILING_OFFSET = parseInt(getMetaValue("auto_tailing_offset"), 10);
 const ANIMATION_SPEED = parseInt(getMetaValue("animation_speed"), 10);
 const TOTAL_ATTEMPTS = parseInt(getMetaValue("total_attempts"), 10);
+const unfoldIdSuffix = "_unfold";
+const foldIdSuffix = "_fold";
 
 function recurse(delay = DELAY) {
   return new Promise((resolve) => {
     setTimeout(resolve, delay);
   });
 }
+/* eslint-disable no-console */
 
 // Enable auto tailing only when users scroll down to the bottom
 // of the page. This prevent auto tailing the page if users want
@@ -67,7 +70,7 @@ window.scrollBottomLogs = scrollBottom;
 function autoTailingLog(tryNumber, metadata = null, autoTailing = false) {
   console.debug(
     `Auto-tailing log for dag_id: ${dagId}, task_id: ${taskId}, ` +
-      `execution_date: ${executionDate}, map_index: ${mapIndex}, try_number: ${tryNumber}, ` +
+      `logical_date: ${logicalDate}, map_index: ${mapIndex}, try_number: ${tryNumber}, ` +
       `metadata: ${JSON.stringify(metadata)}`
   );
 
@@ -78,7 +81,7 @@ function autoTailingLog(tryNumber, metadata = null, autoTailing = false) {
         dag_id: dagId,
         task_id: taskId,
         map_index: mapIndex,
-        execution_date: executionDate,
+        logical_date: logicalDate,
         try_number: tryNumber,
         metadata: JSON.stringify(metadata),
       },
@@ -106,12 +109,23 @@ function autoTailingLog(tryNumber, metadata = null, autoTailing = false) {
         shouldScroll = true;
       }
 
+      // Text coloring, detect urls and log timestamps
+      const ansiUp = new AnsiUp();
+      ansiUp.url_allowlist = {};
       // Detect urls and log timestamps
       const urlRegex =
         /http(s)?:\/\/[\w.-]+(\.?:[\w.-]+)*([/?#][\w\-._~:/?#[\]@!$&'()*+,;=.%]+)?/g;
       const dateRegex = /\d{4}[./-]\d{2}[./-]\d{2} \d{2}:\d{2}:\d{2},\d{3}/g;
       const iso8601Regex =
         /\d{4}[./-]\d{2}[./-]\d{2}T\d{2}:\d{2}:\d{2}.\d{3}[+-]\d{4}/g;
+      // Detect log groups which can be collapsed
+      // Either in Github like format '::group::<group name>' to '::endgroup::'
+      // see https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#grouping-log-lines
+      // Or in ADO pipeline like format '##[group]<group name>' to '##[endgroup]'
+      // see https://learn.microsoft.com/en-us/azure/devops/pipelines/scripts/logging-commands?view=azure-devops&tabs=powershell#formatting-commands
+      const logGroupStart = / INFO - (::|##\[])group(::|\])([^\n])*/g;
+      const logGroupEnd = / INFO - (::|##\[])endgroup(::|\])/g;
+      const logGroupStyle = "color:#0060df;cursor:pointer;font-weight: bold;";
 
       res.message.forEach((item) => {
         const logBlockElementId = `try-${tryNumber}-${item[0]}`;
@@ -128,11 +142,12 @@ function autoTailingLog(tryNumber, metadata = null, autoTailing = false) {
         }
 
         // The message may contain HTML, so either have to escape it or write it as text.
-        const escapedMessage = escapeHtml(item[1]);
-        const linkifiedMessage = escapedMessage
+        const coloredMessage = ansiUp.ansi_to_html(item[1]);
+        const linkifiedMessage = coloredMessage
           .replace(
             urlRegex,
-            (url) => `<a href="${url}" target="_blank">${url}</a>`
+            (url) =>
+              `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
           )
           .replaceAll(
             dateRegex,
@@ -147,6 +162,17 @@ function autoTailingLog(tryNumber, metadata = null, autoTailing = false) {
               `<time datetime="${date}" data-with-tz="true">${formatDateTime(
                 `${date}`
               )}</time>`
+          )
+          .replaceAll(logGroupStart, (line) => {
+            const gName = line.substring(17);
+            const gId = gName.replaceAll(/\W+/g, "_").toLowerCase();
+            const unfold = `<span id="${gId}${unfoldIdSuffix}" style="${logGroupStyle}"> &#9654; ${gName}</span>`;
+            const fold = `<span style="display:none;"><span id="${gId}${foldIdSuffix}" style="${logGroupStyle}"> &#9660; ${gName}</span>`;
+            return unfold + fold;
+          })
+          .replaceAll(
+            logGroupEnd,
+            " <span style='color:#0060df;'>&#9650;&#9650;&#9650; Log group end</span></span>"
           );
         logBlock.innerHTML += `${linkifiedMessage}`;
       });
@@ -165,16 +191,31 @@ function autoTailingLog(tryNumber, metadata = null, autoTailing = false) {
   });
 }
 
+function handleLogGroupClick(e) {
+  if (e.target.id?.endsWith(unfoldIdSuffix)) {
+    e.target.style.display = "none";
+    e.target.nextSibling.style.display = "inline";
+    return false;
+  }
+  if (e.target.id?.endsWith(foldIdSuffix)) {
+    e.target.parentNode.style.display = "none";
+    e.target.parentNode.previousSibling.style.display = "inline";
+    return false;
+  }
+  return true;
+}
+
 function setDownloadUrl(tryNumber) {
-  if (!tryNumber) {
+  let tryNumberData = tryNumber;
+  if (!tryNumberData) {
     // default to the currently selected tab
-    tryNumber = $("#ti_log_try_number_list .active a").data("try-number");
+    tryNumberData = $("#ti_log_try_number_list .active a").data("try-number");
   }
   const query = new URLSearchParams({
     dag_id: dagId,
     task_id: taskId,
-    execution_date: executionDate,
-    try_number: tryNumber,
+    logical_date: logicalDate,
+    try_number: tryNumberData,
     metadata: "null",
     format: "file",
   });
@@ -187,6 +228,7 @@ $(document).ready(() => {
   autoTailingLog(TOTAL_ATTEMPTS, null, true);
 
   setDownloadUrl();
+  // eslint-disable-next-line func-names
   $("#ti_log_try_number_list a").click(function () {
     const tryNumber = $(this).data("try-number");
 
@@ -198,4 +240,11 @@ $(document).ready(() => {
 
     setDownloadUrl(tryNumber);
   });
+
+  console.debug(
+    `Attaching log grouping event handler for ${TOTAL_ATTEMPTS} attempts`
+  );
+  for (let i = 1; i <= TOTAL_ATTEMPTS; i += 1) {
+    document.getElementById(`log-group-${i}`).onclick = handleLogGroupClick;
+  }
 });

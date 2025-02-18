@@ -19,7 +19,7 @@
 
 /* global moment */
 
-import { Box, Button, Flex, Input, Text } from "@chakra-ui/react";
+import { Box, Button, Flex, Text } from "@chakra-ui/react";
 import React from "react";
 
 import { useTimezone } from "src/context/timezone";
@@ -29,15 +29,20 @@ import {
   getDuration,
 } from "src/datetime_utils";
 import useFilters from "src/cluster-activity/useFilters";
+import DateTimeInput from "src/components/DateTimeInput";
 
 const FilterBar = () => {
   const { filters, onStartDateChange, onEndDateChange, clearFilters } =
     useFilters();
 
   const { timezone } = useTimezone();
+  // @ts-ignore
   const startDate = moment(filters.startDate);
+  // @ts-ignore
   const endDate = moment(filters.endDate);
+  // @ts-ignore
   const formattedStartDate = startDate.tz(timezone).format(isoFormatWithoutTZ);
+  // @ts-ignore
   const formattedEndDate = endDate.tz(timezone).format(isoFormatWithoutTZ);
 
   const inputStyles = { backgroundColor: "white", size: "lg" };
@@ -57,9 +62,8 @@ const FilterBar = () => {
           <Text fontSize="sm" as="b" position="absolute" mt="-14px" ml={1}>
             Start Date
           </Text>
-          <Input
+          <DateTimeInput
             {...inputStyles}
-            type="datetime-local"
             value={formattedStartDate || ""}
             onChange={(e) => onStartDateChange(e.target.value)}
           />
@@ -68,16 +72,15 @@ const FilterBar = () => {
           <Text fontSize="sm" as="b" position="absolute" mt="-14px" ml={1}>
             End Date
           </Text>
-          <Input
+          <DateTimeInput
             {...inputStyles}
-            type="datetime-local"
             value={formattedEndDate || ""}
             onChange={(e) => onEndDateChange(e.target.value)}
           />
         </Box>
         <Flex alignItems="center">
           <Text whiteSpace="nowrap">
-            over the last{" "}
+            for a period of{" "}
             {formatDuration(getDuration(formattedStartDate, formattedEndDate))}
           </Text>
         </Flex>

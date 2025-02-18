@@ -16,14 +16,12 @@
 # specific language governing permissions and limitations
 # under the License.
 """Base class for all hooks."""
+
 from __future__ import annotations
 
 import logging
-import warnings
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
-from airflow.exceptions import RemovedInAirflow3Warning
-from airflow.typing_compat import Protocol
 from airflow.utils.log.logging_mixin import LoggingMixin
 
 if TYPE_CHECKING:
@@ -41,23 +39,17 @@ class BaseHook(LoggingMixin):
     object that can handle the connection and interaction to specific
     instances of these systems, and expose consistent methods to interact
     with them.
+
+    :param logger_name: Name of the logger used by the Hook to emit logs.
+        If set to `None` (default), the logger name will fall back to
+        `airflow.task.hooks.{class.__module__}.{class.__name__}` (e.g. DbApiHook will have
+        *airflow.task.hooks.airflow.providers.common.sql.hooks.sql.DbApiHook* as logger).
     """
 
-    @classmethod
-    def get_connections(cls, conn_id: str) -> list[Connection]:
-        """
-        Get all connections as an iterable, given the connection id.
-
-        :param conn_id: connection id
-        :return: array of connections
-        """
-        warnings.warn(
-            "`BaseHook.get_connections` method will be deprecated in the future."
-            "Please use `BaseHook.get_connection` instead.",
-            RemovedInAirflow3Warning,
-            stacklevel=2,
-        )
-        return [cls.get_connection(conn_id)]
+    def __init__(self, logger_name: str | None = None):
+        super().__init__()
+        self._log_config_logger_name = "airflow.task.hooks"
+        self._logger_name = logger_name
 
     @classmethod
     def get_connection(cls, conn_id: str) -> Connection:
@@ -70,22 +62,23 @@ class BaseHook(LoggingMixin):
         from airflow.models.connection import Connection
 
         conn = Connection.get_connection_from_secrets(conn_id)
-        log.info("Using connection ID '%s' for task execution.", conn.conn_id)
+        log.info("Retrieving connection '%s'", conn.conn_id)
         return conn
 
     @classmethod
-    def get_hook(cls, conn_id: str) -> BaseHook:
+    def get_hook(cls, conn_id: str, hook_params: dict | None = None) -> BaseHook:
         """
-        Returns default hook for this connection id.
+        Return default hook for this connection id.
 
         :param conn_id: connection id
+        :param hook_params: hook parameters
         :return: default hook for this connection
         """
         connection = cls.get_connection(conn_id)
-        return connection.get_hook()
+        return connection.get_hook(hook_params=hook_params)
 
     def get_conn(self) -> Any:
-        """Returns connection for the hook."""
+        """Return connection for the hook."""
         raise NotImplementedError()
 
     @classmethod
@@ -144,7 +137,7 @@ class DiscoverableHook(Protocol):
     @staticmethod
     def get_connection_form_widgets() -> dict[str, Any]:
         """
-        Returns dictionary of widgets to be added for the hook to handle extra values.
+        Return dictionary of widgets to be added for the hook to handle extra values.
 
         If you have class hierarchy, usually the widgets needed by your class are already
         added by the base class, so there is no need to implement this method. It might

@@ -21,13 +21,18 @@
 Define an operator extra link
 =============================
 
+If you want to add further links to operators you can define them via a plugin or provider package.
+Extra links will be displayed in task details page in Grid view.
+
 .. image:: ../img/operator_extra_link.png
 
 The following code shows how to add extra links to an operator via Plugins:
 
 .. code-block:: python
 
-    from airflow.models.baseoperator import BaseOperator, BaseOperatorLink
+    from airflow.models.baseoperator import BaseOperator
+    from airflow.models.baseoperatorlink import BaseOperatorLink
+    from airflow.models.taskinstancekey import TaskInstanceKey
     from airflow.plugins_manager import AirflowPlugin
 
 
@@ -39,7 +44,6 @@ The following code shows how to add extra links to an operator via Plugins:
 
 
     class MyFirstOperator(BaseOperator):
-
         operator_extra_links = (GoogleLink(),)
 
         def __init__(self, **kwargs):
@@ -80,8 +84,10 @@ tasks using :class:`~airflow.providers.amazon.aws.transfers.gcs_to_s3.GCSToS3Ope
 
 .. code-block:: python
 
+  from airflow.models.baseoperator import BaseOperator
+  from airflow.models.baseoperatorlink import BaseOperatorLink
+  from airflow.models.taskinstancekey import TaskInstanceKey
   from airflow.plugins_manager import AirflowPlugin
-  from airflow.models.baseoperator import BaseOperatorLink
   from airflow.providers.amazon.aws.transfers.gcs_to_s3 import GCSToS3Operator
 
 
@@ -93,7 +99,11 @@ tasks using :class:`~airflow.providers.amazon.aws.transfers.gcs_to_s3.GCSToS3Ope
       operators = [GCSToS3Operator]
 
       def get_link(self, operator: BaseOperator, *, ti_key: TaskInstanceKey):
-          return "https://s3.amazonaws.com/airflow-logs/{dag_id}/{task_id}/{run_id}".format(
+          # Invalid bucket name because upper case letters and underscores are used
+          # This will not be a valid bucket in any region
+          bucket_name = "Invalid_Bucket_Name"
+          return "https://s3.amazonaws.com/airflow-logs/{bucket_name}/{dag_id}/{task_id}/{run_id}".format(
+              bucket_name=bucket_name,
               dag_id=operator.dag_id,
               task_id=operator.task_id,
               run_id=ti_key.run_id,
@@ -117,33 +127,45 @@ Console, but if we wanted to change that link we could:
 
 .. code-block:: python
 
-    from airflow.plugins_manager import AirflowPlugin
-    from airflow.models.baseoperator import BaseOperatorLink
+    from airflow.models.baseoperator import BaseOperator
+    from airflow.models.baseoperatorlink import BaseOperatorLink
+    from airflow.models.taskinstancekey import TaskInstanceKey
     from airflow.models.xcom import XCom
+    from airflow.plugins_manager import AirflowPlugin
     from airflow.providers.google.cloud.operators.bigquery import BigQueryOperator
 
     # Change from https to http just to display the override
     BIGQUERY_JOB_DETAILS_LINK_FMT = "http://console.cloud.google.com/bigquery?j={job_id}"
 
 
-    class BigQueryConsoleLink(BaseOperatorLink):
+    class BigQueryDatasetLink(BaseGoogleLink):
         """
-        Helper class for constructing BigQuery link.
+        Helper class for constructing BigQuery Dataset Link.
         """
 
-        name = "BigQuery Console"
-        operators = [BigQueryOperator]
+        name = "BigQuery Dataset"
+        key = "bigquery_dataset"
+        format_str = BIGQUERY_DATASET_LINK
 
-        def get_link(self, operator: BaseOperator, *, ti_key: TaskInstanceKey):
-            job_id = XCom.get_one(ti_key=ti_key, key="job_id")
-            return BIGQUERY_JOB_DETAILS_LINK_FMT.format(job_id=job_id) if job_id else ""
+        @staticmethod
+        def persist(
+            context: Context,
+            task_instance: BaseOperator,
+            dataset_id: str,
+            project_id: str,
+        ):
+            task_instance.xcom_push(
+                context,
+                key=BigQueryDatasetLink.key,
+                value={"dataset_id": dataset_id, "project_id": project_id},
+            )
 
 
     # Defining the plugin class
     class AirflowExtraLinkPlugin(AirflowPlugin):
         name = "extra_link_plugin"
         operator_extra_links = [
-            BigQueryConsoleLink(),
+            BigQueryDatasetLink(),
         ]
 
 
@@ -159,9 +181,7 @@ by ``apache-airflow-providers-google`` provider currently:
 .. code-block:: yaml
 
     extra-links:
-      - airflow.providers.google.cloud.operators.bigquery.BigQueryConsoleLink
-      - airflow.providers.google.cloud.operators.bigquery.BigQueryConsoleIndexableLink
-      - airflow.providers.google.cloud.operators.mlengine.AIPlatformConsoleLink
-
+      - airflow.providers.google.cloud.links.bigquery.BigQueryDatasetLink
+      - airflow.providers.google.cloud.links.bigquery.BigQueryTableLink
 
 You can include as many operators with extra links as you want.

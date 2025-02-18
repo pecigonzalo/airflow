@@ -17,9 +17,36 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, AsyncIterator
+import json
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from datetime import timedelta
+from typing import Annotated, Any, Union
+
+import structlog
+from pydantic import (
+    BaseModel,
+    Discriminator,
+    JsonValue,
+    Tag,
+    model_serializer,
+)
 
 from airflow.utils.log.logging_mixin import LoggingMixin
+from airflow.utils.state import TaskInstanceState
+
+log = structlog.get_logger(logger_name=__name__)
+
+
+@dataclass
+class StartTriggerArgs:
+    """Arguments required for start task execution from triggerer."""
+
+    trigger_cls: str
+    next_method: str
+    trigger_kwargs: dict[str, Any] | None = None
+    next_kwargs: dict[str, Any] | None = None
+    timeout: timedelta | None = None
 
 
 class BaseTrigger(abc.ABC, LoggingMixin):
@@ -37,23 +64,19 @@ class BaseTrigger(abc.ABC, LoggingMixin):
     """
 
     def __init__(self, **kwargs):
-
         # these values are set by triggerer when preparing to run the instance
         # when run, they are injected into logger record.
         self.task_instance = None
         self.trigger_id = None
 
     def _set_context(self, context):
-        """
-        This method, part of LoggingMixin, is used mainly for configuration of logging
-        for tasks, but is not used for triggers.
-        """
+        """Part of LoggingMixin and used mainly for configuration of task logging; not used for triggers."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def serialize(self) -> tuple[str, dict[str, Any]]:
         """
-        Returns the information needed to reconstruct this Trigger.
+        Return the information needed to reconstruct this Trigger.
 
         :return: Tuple of (class path, keyword arguments needed to re-instantiate).
         """
@@ -62,7 +85,7 @@ class BaseTrigger(abc.ABC, LoggingMixin):
     @abc.abstractmethod
     async def run(self) -> AsyncIterator[TriggerEvent]:
         """
-        Runs the trigger in an asynchronous context.
+        Run the trigger in an asynchronous context.
 
         The trigger should yield an Event whenever it wants to fire off
         an event, and return None if it is finished. Single-event triggers
@@ -93,13 +116,38 @@ class BaseTrigger(abc.ABC, LoggingMixin):
         and handle it appropriately (in async-compatible way).
         """
 
-    def __repr__(self) -> str:
-        classpath, kwargs = self.serialize()
+    @staticmethod
+    def repr(classpath: str, kwargs: dict[str, Any]):
         kwargs_str = ", ".join(f"{k}={v}" for k, v in kwargs.items())
         return f"<{classpath} {kwargs_str}>"
 
+    def __repr__(self) -> str:
+        classpath, kwargs = self.serialize()
+        return self.repr(classpath, kwargs)
 
-class TriggerEvent:
+
+class BaseEventTrigger(BaseTrigger):
+    """
+    Base class for triggers used to schedule DAGs based on external events.
+
+    ``BaseEventTrigger`` is a subclass of ``BaseTrigger`` designed to identify triggers compatible with
+    event-driven scheduling.
+    """
+
+    @staticmethod
+    def hash(classpath: str, kwargs: dict[str, Any]) -> int:
+        """
+        Return the hash of the trigger classpath and kwargs. This is used to uniquely identify a trigger.
+
+        We do not want to have this logic in ``BaseTrigger`` because, when used to defer tasks, 2 triggers
+        can have the same classpath and kwargs. This is not true for event driven scheduling.
+        """
+        from airflow.serialization.serialized_objects import BaseSerialization
+
+        return hash((classpath, json.dumps(BaseSerialization.serialize(kwargs)).encode("utf-8")))
+
+
+class TriggerEvent(BaseModel):
     """
     Something that a trigger can fire when its conditions are met.
 
@@ -109,13 +157,83 @@ class TriggerEvent:
     events.
     """
 
-    def __init__(self, payload: Any):
-        self.payload = payload
+    payload: Any = None
+    """
+    The payload for the event to send back to the task.
+
+    Must be natively JSON-serializable, or registered with the airflow serialization code.
+    """
+
+    def __init__(self, payload, **kwargs):
+        super().__init__(payload=payload, **kwargs)
 
     def __repr__(self) -> str:
         return f"TriggerEvent<{self.payload!r}>"
 
-    def __eq__(self, other):
-        if isinstance(other, TriggerEvent):
-            return other.payload == self.payload
-        return False
+
+class BaseTaskEndEvent(TriggerEvent):
+    """
+    Base event class to end the task without resuming on worker.
+
+    :meta private:
+    """
+
+    task_instance_state: TaskInstanceState
+    xcoms: dict[str, JsonValue] | None = None
+
+    def __init__(self, *, xcoms: dict[str, JsonValue] | None = None, **kwargs) -> None:
+        """
+        Initialize the class with the specified parameters.
+
+        :param xcoms: A dictionary of XComs or None.
+        :param kwargs: Additional keyword arguments.
+        """
+        if "payload" in kwargs:
+            raise ValueError("Param 'payload' not supported for this class.")
+        # Yes this is _odd_. It's to support both constructor from users of
+        # `TaskSuccessEvent(some_xcom_value)` and deserialization by pydantic.
+        state = kwargs.pop("task_instance_state", self.__pydantic_fields__["task_instance_state"].default)
+        super().__init__(payload=str(state), task_instance_state=state, **kwargs)
+        self.xcoms = xcoms
+
+    @model_serializer
+    def ser_model(self) -> dict[str, Any]:
+        # We need to customize the serialized schema so it works for the custom constructor we have to keep
+        # the interface to this class "nice"
+        return {"task_instance_state": self.task_instance_state, "xcoms": self.xcoms}
+
+
+class TaskSuccessEvent(BaseTaskEndEvent):
+    """Yield this event in order to end the task successfully."""
+
+    task_instance_state: TaskInstanceState = TaskInstanceState.SUCCESS
+
+
+class TaskFailedEvent(BaseTaskEndEvent):
+    """Yield this event in order to end the task with failure."""
+
+    task_instance_state: TaskInstanceState = TaskInstanceState.FAILED
+
+
+class TaskSkippedEvent(BaseTaskEndEvent):
+    """Yield this event in order to end the task with status 'skipped'."""
+
+    task_instance_state: TaskInstanceState = TaskInstanceState.SKIPPED
+
+
+def trigger_event_discriminator(v):
+    if isinstance(v, dict):
+        return v.get("task_instance_state", "_event_")
+    if isinstance(v, TriggerEvent):
+        return getattr(v, "task_instance_state", "_event_")
+
+
+DiscrimatedTriggerEvent = Annotated[
+    Union[
+        Annotated[TriggerEvent, Tag("_event_")],
+        Annotated[TaskSuccessEvent, Tag(TaskInstanceState.SUCCESS)],
+        Annotated[TaskFailedEvent, Tag(TaskInstanceState.FAILED)],
+        Annotated[TaskSkippedEvent, Tag(TaskInstanceState.SKIPPED)],
+    ],
+    Discriminator(trigger_event_discriminator),
+]

@@ -27,12 +27,12 @@ and autoscaling options that Kubernetes provides.
 Helm Chart for Kubernetes
 =========================
 
-We maintain :doc:`official Helm chart <helm-chart:index>` for Airflow that helps you define, install, and upgrade deployment. The Helm Chart uses :doc:`official Docker image and Dockerfile <docker-stack:index>` that is also maintained and released by the community.
+We maintain an :doc:`official Helm chart <helm-chart:index>` for Airflow that helps you define, install, and upgrade deployment. The Helm Chart uses :doc:`official Docker image and Dockerfile <docker-stack:index>` that is also maintained and released by the community.
 
 Kubernetes Executor
 ^^^^^^^^^^^^^^^^^^^
 
-The :doc:`Kubernetes Executor </core-concepts/executor/kubernetes>` allows you to run all the Airflow tasks on
+The :doc:`Kubernetes Executor <apache-airflow-providers-cncf-kubernetes:kubernetes_executor>` allows you to run all the Airflow tasks on
 Kubernetes as separate Pods.
 
 KubernetesPodOperator
@@ -41,16 +41,21 @@ KubernetesPodOperator
 The :ref:`KubernetesPodOperator <howto/operator:kubernetespodoperator>` allows you to create
 Pods on Kubernetes.
 
+.. _kubernetes:pod_mutation_hook:
+
 Pod Mutation Hook
 ^^^^^^^^^^^^^^^^^
 
 The Airflow local settings file (``airflow_local_settings.py``) can define a ``pod_mutation_hook`` function
 that has the ability to mutate pod objects before sending them to the Kubernetes client
 for scheduling. It receives a single argument as a reference to pod objects, and
-is expected to alter its attributes.
+are expected to alter its attributes.
 
 This could be used, for instance, to add sidecar or init containers
 to every worker pod launched by KubernetesExecutor or KubernetesPodOperator.
+
+See :ref:`Configuring local settings <set-config:configuring-local-settings>` for details on how to
+configure local settings.
 
 
 .. code-block:: python

@@ -18,10 +18,10 @@
 from __future__ import annotations
 
 import logging
+from typing import Protocol
 
 from airflow.configuration import conf
 from airflow.exceptions import AirflowException
-from airflow.typing_compat import Protocol
 
 log = logging.getLogger(__name__)
 
@@ -38,12 +38,11 @@ class FernetProtocol(Protocol):
 
 class NullFernet:
     """
-    A "Null" encryptor class that doesn't encrypt or decrypt but that presents
-    a similar interface to Fernet.
+    A "Null" encryptor class that doesn't encrypt or decrypt but that presents a similar interface to Fernet.
 
     The purpose of this is to make the rest of the code not have to know the
     difference, and to only display the message once, not 20 times when
-    `airflow db init` is ran.
+    `airflow db migrate` is run.
     """
 
     is_encrypted = False

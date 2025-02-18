@@ -22,10 +22,10 @@ import os
 import time
 import traceback
 
-import sqlalchemy.orm.mapper
 from sqlalchemy import event, exc
 
 from airflow.configuration import conf
+from airflow.utils.sqlalchemy import get_orm_mapper
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def setup_event_handlers(engine):
     """Setups event handlers."""
     from airflow.models import import_all_models
 
-    event.listen(sqlalchemy.orm.mapper, "before_configured", import_all_models, once=True)
+    event.listen(get_orm_mapper(), "before_configured", import_all_models, once=True)
 
     @event.listens_for(engine, "connect")
     def connect(dbapi_connection, connection_record):
@@ -46,6 +46,7 @@ def setup_event_handlers(engine):
         def set_sqlite_pragma(dbapi_connection, connection_record):
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA journal_mode=WAL")
             cursor.close()
 
     # this ensures coherence in mysql when storing datetimes (not required for postgres)

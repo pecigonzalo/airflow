@@ -17,24 +17,28 @@
 from __future__ import annotations
 
 import datetime as dt
+import itertools
 import os
 import urllib
 
 import pytest
 
 from airflow.api_connexion.exceptions import EXCEPTIONS_LINK_MAP
+from airflow.dag_processing.bundles.manager import DagBundlesManager
 from airflow.models import TaskInstance
 from airflow.models.baseoperator import BaseOperator
 from airflow.models.dagbag import DagBag
 from airflow.models.taskmap import TaskMap
-from airflow.security import permissions
 from airflow.utils.platform import getuser
 from airflow.utils.session import provide_session
 from airflow.utils.state import State, TaskInstanceState
 from airflow.utils.timezone import datetime
-from tests.test_utils.api_connexion_utils import assert_401, create_user, delete_roles, delete_user
-from tests.test_utils.db import clear_db_runs, clear_db_sla_miss, clear_rendered_ti_fields
-from tests.test_utils.mock_operators import MockOperator
+
+from tests_common.test_utils.api_connexion_utils import assert_401, create_user, delete_user
+from tests_common.test_utils.db import clear_db_runs, clear_rendered_ti_fields
+from tests_common.test_utils.mock_operators import MockOperator
+
+pytestmark = pytest.mark.db_test
 
 DEFAULT_DATETIME_1 = datetime(2020, 1, 1)
 DEFAULT_DATETIME_STR_1 = "2020-01-01T00:00:00+00:00"
@@ -47,24 +51,16 @@ QUOTED_DEFAULT_DATETIME_STR_2 = urllib.parse.quote(DEFAULT_DATETIME_STR_2)
 def configured_app(minimal_app_for_api):
     app = minimal_app_for_api
     create_user(
-        app,  # type: ignore
+        app,
         username="test",
-        role_name="Test",
-        permissions=[
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG),
-            (permissions.ACTION_CAN_EDIT, permissions.RESOURCE_DAG),
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG_RUN),
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_TASK_INSTANCE),
-            (permissions.ACTION_CAN_EDIT, permissions.RESOURCE_TASK_INSTANCE),
-        ],
+        role_name="admin",
     )
-    create_user(app, username="test_no_permissions", role_name="TestNoPermissions")  # type: ignore
+    create_user(app, username="test_no_permissions", role_name=None)
 
     yield app
 
-    delete_user(app, username="test")  # type: ignore
-    delete_user(app, username="test_no_permissions")  # type: ignore
-    delete_roles(app)
+    delete_user(app, username="test")
+    delete_user(app, username="test_no_permissions")
 
 
 class TestMappedTaskInstanceEndpoint:
@@ -72,7 +68,7 @@ class TestMappedTaskInstanceEndpoint:
     def setup_attrs(self, configured_app) -> None:
         self.default_time = DEFAULT_DATETIME_1
         self.ti_init = {
-            "execution_date": self.default_time,
+            "logical_date": self.default_time,
             "state": State.RUNNING,
         }
         self.ti_extras = {
@@ -82,20 +78,18 @@ class TestMappedTaskInstanceEndpoint:
             "duration": 10000,
             "pool": "default_pool",
             "queue": "default_queue",
-            "job_id": 0,
         }
         self.app = configured_app
         self.client = self.app.test_client()  # type:ignore
         clear_db_runs()
-        clear_db_sla_miss()
         clear_rendered_ti_fields()
 
-    def create_dag_runs_with_mapped_tasks(self, dag_maker, session, dags={}):
-        for dag_id in dags:
-            count = dags[dag_id]["success"] + dags[dag_id]["running"]
+    def create_dag_runs_with_mapped_tasks(self, dag_maker, session, dags=None):
+        for dag_id, dag in (dags or {}).items():
+            count = dag["success"] + dag["running"]
             with dag_maker(session=session, dag_id=dag_id, start_date=DEFAULT_DATETIME_1):
                 task1 = BaseOperator(task_id="op1")
-                mapped = MockOperator.partial(task_id="task_2").expand(arg2=task1.output)
+                mapped = MockOperator.partial(task_id="task_2", executor="default").expand(arg2=task1.output)
 
             dr = dag_maker.create_dagrun(run_id=f"run_{dag_id}")
 
@@ -118,29 +112,24 @@ class TestMappedTaskInstanceEndpoint:
                     TaskInstance.run_id == dr.run_id,
                 ).delete()
 
-            index = 0
-            for i in range(dags[dag_id]["success"]):
-                ti = TaskInstance(mapped, run_id=dr.run_id, map_index=index, state=TaskInstanceState.SUCCESS)
+            for index, state in enumerate(
+                itertools.chain(
+                    itertools.repeat(TaskInstanceState.SUCCESS, dag["success"]),
+                    itertools.repeat(TaskInstanceState.FAILED, dag["failed"]),
+                    itertools.repeat(TaskInstanceState.RUNNING, dag["running"]),
+                )
+            ):
+                ti = TaskInstance(mapped, run_id=dr.run_id, map_index=index, state=state)
                 setattr(ti, "start_date", DEFAULT_DATETIME_1)
                 session.add(ti)
-                index += 1
-            for i in range(dags[dag_id]["failed"]):
-                ti = TaskInstance(mapped, run_id=dr.run_id, map_index=index, state=TaskInstanceState.FAILED)
-                setattr(ti, "start_date", DEFAULT_DATETIME_1)
-                session.add(ti)
-                index += 1
-            for i in range(dags[dag_id]["running"]):
-                ti = TaskInstance(mapped, run_id=dr.run_id, map_index=index, state=TaskInstanceState.RUNNING)
-                setattr(ti, "start_date", DEFAULT_DATETIME_1)
-                session.add(ti)
-                index += 1
 
+            DagBundlesManager().sync_bundles_to_db()
             self.app.dag_bag = DagBag(os.devnull, include_examples=False)
-            self.app.dag_bag.dags = {dag_id: dag_maker.dag}  # type: ignore
-            self.app.dag_bag.sync_to_db()  # type: ignore
+            self.app.dag_bag.dags = {dag_id: dag_maker.dag}
+            self.app.dag_bag.sync_to_db("dags-folder", None)
             session.flush()
 
-            mapped.expand_mapped_task(dr.run_id, session=session)
+            TaskMap.expand_mapped_task(mapped, dr.run_id, session=session)
 
     @pytest.fixture
     def one_task_with_mapped_tis(self, dag_maker, session):
@@ -223,7 +212,8 @@ class TestGetMappedTaskInstance(TestMappedTaskInstanceEndpoint):
             "dag_run_id": "run_mapped_tis",
             "duration": None,
             "end_date": None,
-            "execution_date": "2020-01-01T00:00:00+00:00",
+            "logical_date": "2020-01-01T00:00:00+00:00",
+            "executor": "default",
             "executor_config": "{}",
             "hostname": "",
             "map_index": 0,
@@ -236,11 +226,13 @@ class TestGetMappedTaskInstance(TestMappedTaskInstanceEndpoint):
             "priority_weight": 1,
             "queue": "default",
             "queued_when": None,
+            "scheduled_when": None,
             "rendered_fields": {},
-            "sla_miss": None,
+            "rendered_map_index": None,
             "start_date": "2020-01-01T00:00:00+00:00",
             "state": "success",
             "task_id": "task_2",
+            "task_display_name": "task_2",
             "try_number": 0,
             "unixname": getuser(),
             "trigger": None,
@@ -329,7 +321,7 @@ class TestGetMappedTaskInstances(TestMappedTaskInstanceEndpoint):
         assert response.status_code == 200
         assert response.json["total_entries"] == 110
         assert len(response.json["task_instances"]) == 100
-        assert list(range(0, 100)) == [ti["map_index"] for ti in response.json["task_instances"]]
+        assert list(range(100)) == [ti["map_index"] for ti in response.json["task_instances"]]
 
     @provide_session
     def test_mapped_task_instances_reverse_order(self, one_task_with_many_mapped_tis, session):
@@ -353,7 +345,19 @@ class TestGetMappedTaskInstances(TestMappedTaskInstanceEndpoint):
         assert response.status_code == 200
         assert response.json["total_entries"] == 110
         assert len(response.json["task_instances"]) == 100
-        assert list(range(0, 5)) + list(range(25, 110)) + list(range(5, 15)) == [
+        assert list(range(5)) + list(range(25, 110)) + list(range(5, 15)) == [
+            ti["map_index"] for ti in response.json["task_instances"]
+        ]
+        # State ascending
+        response = self.client.get(
+            "/api/v1/dags/mapped_tis/dagRuns/run_mapped_tis/taskInstances/task_2/listMapped"
+            "?order_by=state",
+            environ_overrides={"REMOTE_USER": "test"},
+        )
+        assert response.status_code == 200
+        assert response.json["total_entries"] == 110
+        assert len(response.json["task_instances"]) == 100
+        assert list(range(5, 25)) + list(range(90, 110)) + list(range(25, 85)) == [
             ti["map_index"] for ti in response.json["task_instances"]
         ]
 
@@ -385,6 +389,7 @@ class TestGetMappedTaskInstances(TestMappedTaskInstanceEndpoint):
         )
         assert response.status_code == 200
         assert response.json["total_entries"] == 0
+        assert response.json["task_instances"] == []
 
     @provide_session
     def test_mapped_task_instances_with_state(self, one_task_with_mapped_tis, session):
@@ -402,6 +407,7 @@ class TestGetMappedTaskInstances(TestMappedTaskInstanceEndpoint):
         )
         assert response.status_code == 200
         assert response.json["total_entries"] == 0
+        assert response.json["task_instances"] == []
 
     @provide_session
     def test_mapped_task_instances_with_pool(self, one_task_with_mapped_tis, session):
@@ -420,6 +426,7 @@ class TestGetMappedTaskInstances(TestMappedTaskInstanceEndpoint):
         )
         assert response.status_code == 200
         assert response.json["total_entries"] == 0
+        assert response.json["task_instances"] == []
 
     @provide_session
     def test_mapped_task_instances_with_queue(self, one_task_with_mapped_tis, session):
@@ -437,6 +444,25 @@ class TestGetMappedTaskInstances(TestMappedTaskInstanceEndpoint):
         )
         assert response.status_code == 200
         assert response.json["total_entries"] == 0
+        assert response.json["task_instances"] == []
+
+    @provide_session
+    def test_mapped_task_instances_with_executor(self, one_task_with_mapped_tis, session):
+        response = self.client.get(
+            "/api/v1/dags/mapped_tis/dagRuns/run_mapped_tis/taskInstances/task_2/listMapped?executor=default",
+            environ_overrides={"REMOTE_USER": "test"},
+        )
+        assert response.status_code == 200
+        assert response.json["total_entries"] == 3
+        assert len(response.json["task_instances"]) == 3
+
+        response = self.client.get(
+            "/api/v1/dags/mapped_tis/dagRuns/run_mapped_tis/taskInstances/task_2/listMapped?executor=no_exec",
+            environ_overrides={"REMOTE_USER": "test"},
+        )
+        assert response.status_code == 200
+        assert response.json["total_entries"] == 0
+        assert response.json["task_instances"] == []
 
     @provide_session
     def test_mapped_task_instances_with_zero_mapped(self, one_task_with_zero_mapped_tis, session):
@@ -446,4 +472,12 @@ class TestGetMappedTaskInstances(TestMappedTaskInstanceEndpoint):
         )
         assert response.status_code == 200
         assert response.json["total_entries"] == 0
-        assert len(response.json["task_instances"]) == 0
+        assert response.json["task_instances"] == []
+
+    def test_should_raise_404_not_found_for_nonexistent_task(self):
+        response = self.client.get(
+            "/api/v1/dags/mapped_tis/dagRuns/run_mapped_tis/taskInstances/nonexistent_task/listMapped",
+            environ_overrides={"REMOTE_USER": "test"},
+        )
+        assert response.status_code == 404
+        assert response.json["title"] == "Task id nonexistent_task not found"

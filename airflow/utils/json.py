@@ -44,7 +44,8 @@ class AirflowJsonProvider(JSONProvider):
 
 
 class WebEncoder(json.JSONEncoder):
-    """This encodes values into a web understandable format. There is no deserializer.
+    """
+    This encodes values into a web understandable format. There is no deserializer.
 
     This parses datetime, dates, Decimal and bytes. In order to parse the custom
     classes and the other types, and since it's just to show the result in the UI,
@@ -105,11 +106,7 @@ class XComEncoder(json.JSONEncoder):
 
 
 class XComDecoder(json.JSONDecoder):
-    """
-    This decoder deserializes dicts to objects if they contain
-    the `__classname__` key otherwise it will return the dict
-    as is.
-    """
+    """Deserialize dicts to objects if they contain the `__classname__` key, otherwise return the dict."""
 
     def __init__(self, *args, **kwargs) -> None:
         if not kwargs.get("object_hook"):
@@ -122,7 +119,7 @@ class XComDecoder(json.JSONDecoder):
 
     @staticmethod
     def orm_object_hook(dct: dict) -> object:
-        """Creates a readable representation of a serialized object."""
+        """Create a readable representation of a serialized object."""
         return deserialize(dct, False)
 
 

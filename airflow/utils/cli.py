@@ -16,30 +16,30 @@
 # specific language governing permissions and limitations
 # under the License.
 """Utilities module for cli."""
+
 from __future__ import annotations
 
 import functools
 import logging
 import os
-import re
 import socket
 import sys
 import threading
 import traceback
 import warnings
 from argparse import Namespace
-from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, TypeVar, cast
 
-from sqlalchemy.orm import Session
+import re2
 
 from airflow import settings
-from airflow.exceptions import AirflowException, RemovedInAirflow3Warning
-from airflow.utils import cli_action_loggers
+from airflow.dag_processing.bundles.manager import DagBundlesManager
+from airflow.exceptions import AirflowException
+from airflow.sdk.execution_time.secrets_masker import should_hide_value_for_key
+from airflow.utils import cli_action_loggers, timezone
 from airflow.utils.log.non_caching_file_handler import NonCachingFileHandler
 from airflow.utils.platform import getuser, is_terminal_support_colors
-from airflow.utils.session import NEW_SESSION, provide_session
 
 T = TypeVar("T", bound=Callable)
 
@@ -61,9 +61,10 @@ def _check_cli_args(args):
 def action_cli(func=None, check_db=True):
     def action_logging(f: T) -> T:
         """
-        Decorates function to execute function at the same time submitting action_logging
-        but in CLI context. It will call action logger callbacks twice,
-        one for pre-execution and the other one for post-execution.
+        Decorate function to execute function at the same time submitting action_logging but in CLI context.
+
+        It will call action logger callbacks twice, one for
+        pre-execution and the other one for post-execution.
 
         Action logger will be called with below keyword parameters:
             sub_command : name of sub-command
@@ -74,7 +75,7 @@ def action_cli(func=None, check_db=True):
             log : airflow.models.log.Log ORM instance
             dag_id : dag id (optional)
             task_id : task_id (optional)
-            execution_date : execution date (optional)
+            logical_date : logical date (optional)
             error : exception instance if there's an exception
 
         :param f: function instance
@@ -84,8 +85,7 @@ def action_cli(func=None, check_db=True):
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
             """
-            An wrapper for cli functions. It assumes to have Namespace instance
-            at 1st positional argument.
+            Wrap cli functions; assume Namespace instance as first positional argument.
 
             :param args: Positional argument. It assumes to have Namespace instance
                 at 1st positional argument
@@ -114,7 +114,7 @@ def action_cli(func=None, check_db=True):
                 metrics["error"] = e
                 raise
             finally:
-                metrics["end_datetime"] = datetime.utcnow()
+                metrics["end_datetime"] = timezone.utcnow()
                 cli_action_loggers.on_post_execution(**metrics)
 
         return cast(T, wrapper)
@@ -126,20 +126,28 @@ def action_cli(func=None, check_db=True):
 
 def _build_metrics(func_name, namespace):
     """
-    Builds metrics dict from function args
+    Build metrics dict from function args.
+
     It assumes that function arguments is from airflow.bin.cli module's function
     and has Namespace instance where it optionally contains "dag_id", "task_id",
-    and "execution_date".
+    and "logical_date".
 
     :param func_name: name of function
     :param namespace: Namespace instance from argparse
     :return: dict with metrics
     """
-    sub_commands_to_check = {"users", "connections"}
+    sub_commands_to_check_for_sensitive_fields = {"users", "connections"}
+    sub_commands_to_check_for_sensitive_key = {"variables"}
     sensitive_fields = {"-p", "--password", "--conn-password"}
     full_command = list(sys.argv)
     sub_command = full_command[1] if len(full_command) > 1 else None
-    if sub_command in sub_commands_to_check:
+    # For cases when value under sub_commands_to_check_for_sensitive_key have sensitive info
+    if sub_command in sub_commands_to_check_for_sensitive_key:
+        key = full_command[-2] if len(full_command) > 3 else None
+        if key and should_hide_value_for_key(key):
+            # Mask the sensitive value since key contain sensitive keyword
+            full_command[-1] = "*" * 8
+    elif sub_command in sub_commands_to_check_for_sensitive_fields:
         for idx, command in enumerate(full_command):
             if command in sensitive_fields:
                 # For cases when password is passed as "--password xyz" (with space between key and value)
@@ -150,9 +158,43 @@ def _build_metrics(func_name, namespace):
                     if command.startswith(f"{sensitive_field}="):
                         full_command[idx] = f'{sensitive_field}={"*" * 8}'
 
+    # handle conn-json and conn-uri separately as it requires different handling
+    if "--conn-json" in full_command:
+        import json
+
+        json_index = full_command.index("--conn-json") + 1
+        conn_json = json.loads(full_command[json_index])
+        for k in conn_json:
+            if k and should_hide_value_for_key(k):
+                conn_json[k] = "*" * 8
+        full_command[json_index] = json.dumps(conn_json)
+
+    if "--conn-uri" in full_command:
+        from urllib.parse import urlparse, urlunparse
+
+        uri_index = full_command.index("--conn-uri") + 1
+        conn_uri = full_command[uri_index]
+        parsed_uri = urlparse(conn_uri)
+        if parsed_uri.password:
+            password = "*" * 8
+            netloc = f"{parsed_uri.username}:{password}@{parsed_uri.hostname}"
+            if parsed_uri.port:
+                netloc += f":{parsed_uri.port}"
+
+        full_command[uri_index] = urlunparse(
+            (
+                parsed_uri.scheme,
+                netloc,
+                parsed_uri.path,
+                parsed_uri.params,
+                parsed_uri.query,
+                parsed_uri.fragment,
+            )
+        )
+
     metrics = {
         "sub_command": func_name,
-        "start_datetime": datetime.utcnow(),
+        "start_datetime": timezone.utcnow(),
         "full_command": f"{full_command}",
         "user": getuser(),
     }
@@ -164,14 +206,14 @@ def _build_metrics(func_name, namespace):
     tmp_dic = vars(namespace)
     metrics["dag_id"] = tmp_dic.get("dag_id")
     metrics["task_id"] = tmp_dic.get("task_id")
-    metrics["execution_date"] = tmp_dic.get("execution_date")
+    metrics["logical_date"] = tmp_dic.get("logical_date")
     metrics["host_name"] = socket.gethostname()
 
     return metrics
 
 
 def process_subdir(subdir: str | None):
-    """Expands path to absolute by replacing 'DAGS_FOLDER', '~', '.', etc."""
+    """Expand path to absolute by replacing 'DAGS_FOLDER', '~', '.', etc."""
     if subdir:
         if not settings.DAGS_FOLDER:
             raise ValueError("DAGS_FOLDER variable in settings should be filled.")
@@ -181,7 +223,8 @@ def process_subdir(subdir: str | None):
 
 
 def get_dag_by_file_location(dag_id: str):
-    """Returns DAG of a given dag_id by looking up file location."""
+    """Return DAG of a given dag_id by looking up file location."""
+    # TODO: AIP-66 - investigate more, can we use serdag?
     from airflow.models import DagBag, DagModel
 
     # Benefit is that logging from other dags in dagbag will not appear
@@ -215,37 +258,45 @@ def _search_for_dag_file(val: str | None) -> str | None:
     return None
 
 
-def get_dag(subdir: str | None, dag_id: str) -> DAG:
+def get_dag(subdir: str | None, dag_id: str, from_db: bool = False) -> DAG:
     """
-    Returns DAG of a given dag_id.
+    Return DAG of a given dag_id.
 
-    First it we'll try to use the given subdir.  If that doesn't work, we'll try to
+    First we'll try to use the given subdir.  If that doesn't work, we'll try to
     find the correct path (assuming it's a file) and failing that, use the configured
     dags folder.
     """
     from airflow.models import DagBag
 
-    first_path = process_subdir(subdir)
-    dagbag = DagBag(first_path)
-    if dag_id not in dagbag.dags:
+    if from_db:
+        dagbag = DagBag(read_dags_from_db=True)
+        dag = dagbag.get_dag(dag_id)  # get_dag loads from the DB as requested
+    else:
+        first_path = process_subdir(subdir)
+        dagbag = DagBag(first_path)
+        dag = dagbag.dags.get(dag_id)  # avoids db calls made in get_dag
+    if not dag:
+        if from_db:
+            raise AirflowException(f"Dag {dag_id!r} could not be found in DagBag read from database.")
         fallback_path = _search_for_dag_file(subdir) or settings.DAGS_FOLDER
         logger.warning("Dag %r not found in path %s; trying path %s", dag_id, first_path, fallback_path)
         dagbag = DagBag(dag_folder=fallback_path)
-        if dag_id not in dagbag.dags:
+        dag = dagbag.get_dag(dag_id)
+        if not dag:
             raise AirflowException(
                 f"Dag {dag_id!r} could not be found; either it does not exist or it failed to parse."
             )
-    return dagbag.dags[dag_id]
+    return dag
 
 
 def get_dags(subdir: str | None, dag_id: str, use_regex: bool = False):
-    """Returns DAG(s) matching a given regex or dag_id."""
+    """Return DAG(s) matching a given regex or dag_id."""
     from airflow.models import DagBag
 
     if not use_regex:
         return [get_dag(subdir, dag_id)]
     dagbag = DagBag(process_subdir(subdir))
-    matched_dags = [dag for dag in dagbag.dags.values() if re.search(dag_id, dag.dag_id)]
+    matched_dags = [dag for dag in dagbag.dags.values() if re2.search(dag_id, dag.dag_id)]
     if not matched_dags:
         raise AirflowException(
             f"dag_id could not be found with regex: {dag_id}. Either the dag did not exist or "
@@ -254,20 +305,8 @@ def get_dags(subdir: str | None, dag_id: str, use_regex: bool = False):
     return matched_dags
 
 
-@provide_session
-def get_dag_by_pickle(pickle_id: int, session: Session = NEW_SESSION) -> DAG:
-    """Fetch DAG from the database using pickling."""
-    from airflow.models import DagPickle
-
-    dag_pickle = session.query(DagPickle).filter(DagPickle.id == pickle_id).first()
-    if not dag_pickle:
-        raise AirflowException(f"pickle_id could not be found in DagPickle.id list: {pickle_id}")
-    pickle_dag = dag_pickle.pickle
-    return pickle_dag
-
-
 def setup_locations(process, pid=None, stdout=None, stderr=None, log=None):
-    """Creates logging paths."""
+    """Create logging paths."""
     if not stderr:
         stderr = os.path.join(settings.AIRFLOW_HOME, f"airflow-{process}.err")
     if not stdout:
@@ -284,7 +323,7 @@ def setup_locations(process, pid=None, stdout=None, stderr=None, log=None):
 
 
 def setup_logging(filename):
-    """Creates log file handler for daemon process."""
+    """Create log file handler for daemon process."""
     root = logging.getLogger()
     handler = NonCachingFileHandler(filename)
     formatter = logging.Formatter(settings.SIMPLE_LOG_FORMAT)
@@ -297,7 +336,7 @@ def setup_logging(filename):
 
 def sigint_handler(sig, frame):
     """
-    Returns without error on SIGINT or SIGTERM signals in interactive command mode.
+    Return without error on SIGINT or SIGTERM signals in interactive command mode.
 
     e.g. CTRL+C or kill <PID>
     """
@@ -306,7 +345,7 @@ def sigint_handler(sig, frame):
 
 def sigquit_handler(sig, frame):
     """
-    Helps debug deadlocks by printing stacktraces when this gets a SIGQUIT.
+    Help debug deadlocks by printing stacktraces when this gets a SIGQUIT.
 
     e.g. kill -s QUIT <PID> or CTRL+
     """
@@ -331,7 +370,7 @@ class ColorMode:
 
 
 def should_use_colors(args) -> bool:
-    """Processes arguments and decides whether to enable color in output."""
+    """Process arguments and decide whether to enable color in output."""
     if args.color == ColorMode.ON:
         return True
     if args.color == ColorMode.OFF:
@@ -340,22 +379,11 @@ def should_use_colors(args) -> bool:
 
 
 def should_ignore_depends_on_past(args) -> bool:
-    if args.ignore_depends_on_past:
-        warnings.warn(
-            "Using `--ignore-depends-on-past` is Deprecated."
-            "Please use `--depends-on-past ignore` instead.",
-            RemovedInAirflow3Warning,
-            stacklevel=2,
-        )
-        return True
     return args.depends_on_past == "ignore"
 
 
 def suppress_logs_and_warning(f: T) -> T:
-    """
-    Decorator to suppress logging and warning messages
-    in cli functions.
-    """
+    """Suppress logging and warning messages in cli functions."""
 
     @functools.wraps(f)
     def _wrapper(*args, **kwargs):
@@ -374,3 +402,12 @@ def suppress_logs_and_warning(f: T) -> T:
                     logging.disable(logging.NOTSET)
 
     return cast(T, _wrapper)
+
+
+def validate_dag_bundle_arg(bundle_names: list[str]) -> None:
+    """Make sure only known bundles are passed as arguments."""
+    known_bundles = {b.name for b in DagBundlesManager().get_all_dag_bundles()}
+
+    unknown_bundles: set[str] = set(bundle_names) - known_bundles
+    if unknown_bundles:
+        raise SystemExit(f"Bundles not found: {', '.join(unknown_bundles)}")

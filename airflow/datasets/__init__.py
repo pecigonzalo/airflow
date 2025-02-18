@@ -14,31 +14,48 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+
+# We do not use "from __future__ import annotations" here because it is not supported
+# by Pycharm when we want to make sure all imports in airflow work from namespace packages
+# Adding it automatically is excluded in pyproject.toml via I002 ruff rule exclusion
+
+# Make `airflow` a namespace package, supporting installing
+# airflow.providers.* in different locations (i.e. one in site, and one in user
+# lib.)  This is required by some IDEs to resolve the import paths.
 from __future__ import annotations
 
-from typing import Any, ClassVar
-from urllib.parse import urlsplit
+import importlib
+import warnings
 
-import attr
+# TODO: Remove this module in Airflow 3.2
+
+_names_moved = {
+    "DatasetAlias": ("airflow.sdk.definitions.asset", "AssetAlias"),
+    "DatasetAll": ("airflow.sdk.definitions.asset", "AssetAll"),
+    "DatasetAny": ("airflow.sdk.definitions.asset", "DatasetAny"),
+    "Dataset": ("airflow.sdk.definitions.asset", "Asset"),
+    "expand_alias_to_datasets": ("airflow.models.asset", "expand_alias_to_assets"),
+}
 
 
-@attr.define()
-class Dataset:
-    """A Dataset is used for marking data dependencies between workflows."""
+def __getattr__(name: str):
+    # PEP-562: Lazy loaded attributes on python modules
+    if name not in _names_moved:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-    uri: str = attr.field(validator=[attr.validators.min_len(1), attr.validators.max_len(3000)])
-    extra: dict[str, Any] | None = None
+    module_path, new_name = _names_moved[name]
+    warnings.warn(
+        f"Import 'airflow.dataset.{name}' is deprecated and "
+        f"will be removed in the Airflow 3.2. Please import it from '{module_path}.{new_name}'.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    mod = importlib.import_module(module_path, __name__)
+    val = getattr(mod, new_name)
 
-    __version__: ClassVar[int] = 1
+    # Store for next time
+    globals()[name] = val
+    return val
 
-    @uri.validator
-    def _check_uri(self, attr, uri: str):
-        if uri.isspace():
-            raise ValueError(f"{attr.name} cannot be just whitespace")
-        try:
-            uri.encode("ascii")
-        except UnicodeEncodeError:
-            raise ValueError(f"{attr.name!r} must be ascii")
-        parsed = urlsplit(uri)
-        if parsed.scheme and parsed.scheme.lower() == "airflow":
-            raise ValueError(f"{attr.name!r} scheme `airflow` is reserved")
+
+__all__ = ["Dataset", "DatasetAlias", "DatasetAll", "DatasetAny", "expand_alias_to_datasets"]

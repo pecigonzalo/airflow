@@ -16,12 +16,19 @@
 # under the License.
 from __future__ import annotations
 
-from airflow.models import DAG
+from datetime import timedelta
+
+import pytest
+
+from airflow.models.dag import DAG
 from airflow.models.dagrun import DagRun
 from airflow.utils.session import create_session
 from airflow.utils.state import DagRunState
-from airflow.utils.types import DagRunType
+from airflow.utils.types import DagRunTriggeredByType, DagRunType
+
 from tests.models import DEFAULT_DATE
+
+pytestmark = pytest.mark.db_test
 
 
 def test_dagrun_state_enum_escape():
@@ -30,16 +37,28 @@ def test_dagrun_state_enum_escape():
     referenced in DB query
     """
     with create_session() as session:
-        dag = DAG(dag_id="test_dagrun_state_enum_escape", start_date=DEFAULT_DATE)
+        dag = DAG(dag_id="test_dagrun_state_enum_escape", schedule=timedelta(days=1), start_date=DEFAULT_DATE)
         dag.create_dagrun(
+            run_id=dag.timetable.generate_run_id(
+                run_type=DagRunType.SCHEDULED,
+                run_after=DEFAULT_DATE,
+                data_interval=dag.timetable.infer_manual_data_interval(run_after=DEFAULT_DATE),
+            ),
             run_type=DagRunType.SCHEDULED,
             state=DagRunState.QUEUED,
-            execution_date=DEFAULT_DATE,
+            logical_date=DEFAULT_DATE,
             start_date=DEFAULT_DATE,
+            data_interval=dag.timetable.infer_manual_data_interval(run_after=DEFAULT_DATE),
             session=session,
+            run_after=DEFAULT_DATE,
+            triggered_by=DagRunTriggeredByType.TEST,
         )
 
-        query = session.query(DagRun.dag_id, DagRun.state, DagRun.run_type,).filter(
+        query = session.query(
+            DagRun.dag_id,
+            DagRun.state,
+            DagRun.run_type,
+        ).filter(
             DagRun.dag_id == dag.dag_id,
             # make sure enum value can be used in filter queries
             DagRun.state == DagRunState.QUEUED,

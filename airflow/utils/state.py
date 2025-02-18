@@ -20,9 +20,49 @@ from __future__ import annotations
 from enum import Enum
 
 
+class JobState(str, Enum):
+    """All possible states that a Job can be in."""
+
+    RUNNING = "running"
+    SUCCESS = "success"
+    RESTARTING = "restarting"
+    FAILED = "failed"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class TerminalTIState(str, Enum):
+    """States that a Task Instance can be in that indicate it has reached a terminal state."""
+
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"  # A user can raise a AirflowSkipException from a task & it will be marked as skipped
+    REMOVED = "removed"
+    FAIL_WITHOUT_RETRY = "fail_without_retry"
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class IntermediateTIState(str, Enum):
+    """States that a Task Instance can be in that indicate it is not yet in a terminal or running state."""
+
+    SCHEDULED = "scheduled"
+    QUEUED = "queued"
+    RESTARTING = "restarting"
+    UP_FOR_RETRY = "up_for_retry"
+    UP_FOR_RESCHEDULE = "up_for_reschedule"
+    UPSTREAM_FAILED = "upstream_failed"
+    DEFERRED = "deferred"
+
+    def __str__(self) -> str:
+        return self.value
+
+
 class TaskInstanceState(str, Enum):
     """
-    Enum that represents all possible states that a Task Instance can be in.
+    All possible states that a Task Instance can be in.
 
     Note that None is also allowed, so always use this in a type hint with Optional.
     """
@@ -32,21 +72,20 @@ class TaskInstanceState(str, Enum):
     # Use None instead if need this state.
 
     # Set by the scheduler
-    REMOVED = "removed"  # Task vanished from DAG before it ran
-    SCHEDULED = "scheduled"  # Task should run and will be handed to executor soon
+    REMOVED = TerminalTIState.REMOVED  # Task vanished from DAG before it ran
+    SCHEDULED = IntermediateTIState.SCHEDULED  # Task should run and will be handed to executor soon
 
     # Set by the task instance itself
-    QUEUED = "queued"  # Executor has enqueued the task
+    QUEUED = IntermediateTIState.QUEUED  # Executor has enqueued the task
     RUNNING = "running"  # Task is executing
-    SUCCESS = "success"  # Task completed
-    SHUTDOWN = "shutdown"  # External request to shut down (e.g. marked failed when running)
-    RESTARTING = "restarting"  # External request to restart (e.g. cleared when running)
-    FAILED = "failed"  # Task errored out
-    UP_FOR_RETRY = "up_for_retry"  # Task failed but has retries left
-    UP_FOR_RESCHEDULE = "up_for_reschedule"  # A waiting `reschedule` sensor
-    UPSTREAM_FAILED = "upstream_failed"  # One or more upstream deps failed
-    SKIPPED = "skipped"  # Skipped by branching or some other mechanism
-    DEFERRED = "deferred"  # Deferrable operator waiting on a trigger
+    SUCCESS = TerminalTIState.SUCCESS  # Task completed
+    RESTARTING = IntermediateTIState.RESTARTING  # External request to restart (e.g. cleared when running)
+    FAILED = TerminalTIState.FAILED  # Task errored out
+    UP_FOR_RETRY = IntermediateTIState.UP_FOR_RETRY  # Task failed but has retries left
+    UP_FOR_RESCHEDULE = IntermediateTIState.UP_FOR_RESCHEDULE  # A waiting `reschedule` sensor
+    UPSTREAM_FAILED = IntermediateTIState.UPSTREAM_FAILED  # One or more upstream deps failed
+    SKIPPED = TerminalTIState.SKIPPED  # Skipped by branching or some other mechanism
+    DEFERRED = IntermediateTIState.DEFERRED  # Deferrable operator waiting on a trigger
 
     def __str__(self) -> str:
         return self.value
@@ -54,7 +93,7 @@ class TaskInstanceState(str, Enum):
 
 class DagRunState(str, Enum):
     """
-    Enum that represents all possible states that a DagRun can be in.
+    All possible states that a DagRun can be in.
 
     These are "shared" with TaskInstanceState in some parts of the code,
     so please ensure that their values always match the ones with the
@@ -71,10 +110,7 @@ class DagRunState(str, Enum):
 
 
 class State:
-    """
-    Static class with task instance state constants and color methods to
-    avoid hardcoding.
-    """
+    """Static class with task instance state constants and color methods to avoid hard-coding."""
 
     # Backwards-compat constants for code that does not yet use the enum
     # These first three are shared by DagState and TaskState
@@ -87,7 +123,6 @@ class State:
     REMOVED = TaskInstanceState.REMOVED
     SCHEDULED = TaskInstanceState.SCHEDULED
     QUEUED = TaskInstanceState.QUEUED
-    SHUTDOWN = TaskInstanceState.SHUTDOWN
     RESTARTING = TaskInstanceState.RESTARTING
     UP_FOR_RETRY = TaskInstanceState.UP_FOR_RETRY
     UP_FOR_RESCHEDULE = TaskInstanceState.UP_FOR_RESCHEDULE
@@ -98,7 +133,7 @@ class State:
     finished_dr_states: frozenset[DagRunState] = frozenset([DagRunState.SUCCESS, DagRunState.FAILED])
     unfinished_dr_states: frozenset[DagRunState] = frozenset([DagRunState.QUEUED, DagRunState.RUNNING])
 
-    task_states: tuple[TaskInstanceState | None, ...] = (None,) + tuple(TaskInstanceState)
+    task_states: tuple[TaskInstanceState | None, ...] = (None, *TaskInstanceState)
 
     dag_states: tuple[DagRunState, ...] = (
         DagRunState.QUEUED,
@@ -112,7 +147,6 @@ class State:
         TaskInstanceState.QUEUED: "gray",
         TaskInstanceState.RUNNING: "lime",
         TaskInstanceState.SUCCESS: "green",
-        TaskInstanceState.SHUTDOWN: "blue",
         TaskInstanceState.RESTARTING: "violet",
         TaskInstanceState.FAILED: "red",
         TaskInstanceState.UP_FOR_RETRY: "gold",
@@ -126,7 +160,7 @@ class State:
 
     @classmethod
     def color(cls, state):
-        """Returns color for a state."""
+        """Return color for a state."""
         return cls.state_color.get(state, "white")
 
     @classmethod
@@ -161,7 +195,6 @@ class State:
             TaskInstanceState.SCHEDULED,
             TaskInstanceState.QUEUED,
             TaskInstanceState.RUNNING,
-            TaskInstanceState.SHUTDOWN,
             TaskInstanceState.RESTARTING,
             TaskInstanceState.UP_FOR_RETRY,
             TaskInstanceState.UP_FOR_RESCHEDULE,
@@ -187,7 +220,10 @@ class State:
     A list of states indicating that a task or dag is a success state.
     """
 
-    terminating_states = frozenset([TaskInstanceState.SHUTDOWN, TaskInstanceState.RESTARTING])
+    adoptable_states = frozenset(
+        [TaskInstanceState.QUEUED, TaskInstanceState.RUNNING, TaskInstanceState.RESTARTING]
+    )
     """
-    A list of states indicating that a task has been terminated.
+    A list of states indicating that a task can be adopted or reset by a scheduler job
+    if it was queued by another scheduler job that is not running anymore.
     """

@@ -16,55 +16,85 @@
 # under the License.
 from __future__ import annotations
 
+from collections.abc import Collection
 from http import HTTPStatus
-from typing import Collection
+from typing import TYPE_CHECKING
 
 from connexion import NoContent
-from flask import g, request
+from flask import request
 from marshmallow import ValidationError
-from sqlalchemy.orm import Session
+from sqlalchemy import select, update
 from sqlalchemy.sql.expression import or_
 
-from airflow import DAG
 from airflow.api_connexion import security
 from airflow.api_connexion.exceptions import AlreadyExists, BadRequest, NotFound
 from airflow.api_connexion.parameters import apply_sorting, check_limit, format_parameters
 from airflow.api_connexion.schemas.dag_schema import (
     DAGCollection,
-    dag_detail_schema,
+    DAGCollectionSchema,
+    DAGDetailSchema,
+    DAGSchema,
     dag_schema,
     dags_collection_schema,
 )
-from airflow.api_connexion.types import APIResponse, UpdateMask
+from airflow.api_fastapi.app import get_auth_manager
 from airflow.exceptions import AirflowException, DagNotFound
 from airflow.models.dag import DagModel, DagTag
-from airflow.security import permissions
 from airflow.utils.airflow_flask_app import get_airflow_app
+from airflow.utils.api_migration import mark_fastapi_migration_done
+from airflow.utils.db import get_query_count
 from airflow.utils.session import NEW_SESSION, provide_session
+from airflow.www.decorators import action_logging
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from airflow import DAG
+    from airflow.api_connexion.types import APIResponse, UpdateMask
 
 
-@security.requires_access([(permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG)])
+@mark_fastapi_migration_done
+@security.requires_access_dag("GET")
 @provide_session
-def get_dag(*, dag_id: str, session: Session = NEW_SESSION) -> APIResponse:
+def get_dag(
+    *, dag_id: str, fields: Collection[str] | None = None, session: Session = NEW_SESSION
+) -> APIResponse:
     """Get basic information about a DAG."""
-    dag = session.query(DagModel).filter(DagModel.dag_id == dag_id).one_or_none()
-
+    dag = session.scalar(select(DagModel).where(DagModel.dag_id == dag_id))
     if dag is None:
         raise NotFound("DAG not found", detail=f"The DAG with dag_id: {dag_id} was not found")
+    try:
+        dag_schema = DAGSchema(only=fields) if fields else DAGSchema()
+    except ValueError as e:
+        raise BadRequest("DAGSchema init error", detail=str(e))
+    return dag_schema.dump(
+        dag,
+    )
 
-    return dag_schema.dump(dag)
 
-
-@security.requires_access([(permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG)])
-def get_dag_details(*, dag_id: str) -> APIResponse:
+@mark_fastapi_migration_done
+@security.requires_access_dag("GET")
+@provide_session
+def get_dag_details(
+    *, dag_id: str, fields: Collection[str] | None = None, session: Session = NEW_SESSION
+) -> APIResponse:
     """Get details of DAG."""
     dag: DAG = get_airflow_app().dag_bag.get_dag(dag_id)
     if not dag:
         raise NotFound("DAG not found", detail=f"The DAG with dag_id: {dag_id} was not found")
-    return dag_detail_schema.dump(dag)
+    dag_model: DagModel = session.get(DagModel, dag_id)
+    for key, value in dag.__dict__.items():
+        if not key.startswith("_") and not hasattr(dag_model, key):
+            setattr(dag_model, key, value)
+    try:
+        dag_detail_schema = DAGDetailSchema(only=fields) if fields else DAGDetailSchema()
+    except ValueError as e:
+        raise BadRequest("DAGDetailSchema init error", detail=str(e))
+    return dag_detail_schema.dump(dag_model)
 
 
-@security.requires_access([(permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG)])
+@mark_fastapi_migration_done
+@security.requires_access_dag("GET")
 @format_parameters({"limit": check_limit})
 @provide_session
 def get_dags(
@@ -76,36 +106,47 @@ def get_dags(
     only_active: bool = True,
     paused: bool | None = None,
     order_by: str = "dag_id",
+    fields: Collection[str] | None = None,
     session: Session = NEW_SESSION,
 ) -> APIResponse:
     """Get all DAGs."""
     allowed_attrs = ["dag_id"]
-    dags_query = session.query(DagModel).filter(~DagModel.is_subdag)
+    dags_query = select(DagModel)
     if only_active:
-        dags_query = dags_query.filter(DagModel.is_active)
+        dags_query = dags_query.where(DagModel.is_active)
     if paused is not None:
         if paused:
-            dags_query = dags_query.filter(DagModel.is_paused)
+            dags_query = dags_query.where(DagModel.is_paused)
         else:
-            dags_query = dags_query.filter(~DagModel.is_paused)
+            dags_query = dags_query.where(~DagModel.is_paused)
     if dag_id_pattern:
-        dags_query = dags_query.filter(DagModel.dag_id.ilike(f"%{dag_id_pattern}%"))
+        dags_query = dags_query.where(DagModel.dag_id.ilike(f"%{dag_id_pattern}%"))
 
-    readable_dags = get_airflow_app().appbuilder.sm.get_accessible_dag_ids(g.user)
+    readable_dags = get_auth_manager().get_permitted_dag_ids(user=get_auth_manager().get_user())
 
-    dags_query = dags_query.filter(DagModel.dag_id.in_(readable_dags))
+    dags_query = dags_query.where(DagModel.dag_id.in_(readable_dags))
     if tags:
         cond = [DagModel.tags.any(DagTag.name == tag) for tag in tags]
-        dags_query = dags_query.filter(or_(*cond))
+        dags_query = dags_query.where(or_(*cond))
 
-    total_entries = dags_query.count()
+    total_entries = get_query_count(dags_query, session=session)
     dags_query = apply_sorting(dags_query, order_by, {}, allowed_attrs)
-    dags = dags_query.offset(offset).limit(limit).all()
+    dags = session.scalars(dags_query.offset(offset).limit(limit)).all()
 
-    return dags_collection_schema.dump(DAGCollection(dags=dags, total_entries=total_entries))
+    try:
+        dags_collection_schema = (
+            DAGCollectionSchema(only=[f"dags.{field}" for field in fields] + ["total_entries"])
+            if fields
+            else DAGCollectionSchema()
+        )
+        return dags_collection_schema.dump(DAGCollection(dags=dags, total_entries=total_entries))
+    except ValueError as e:
+        raise BadRequest("DAGCollectionSchema error", detail=str(e))
 
 
-@security.requires_access([(permissions.ACTION_CAN_EDIT, permissions.RESOURCE_DAG)])
+@mark_fastapi_migration_done
+@security.requires_access_dag("PUT")
+@action_logging
 @provide_session
 def patch_dag(*, dag_id: str, update_mask: UpdateMask = None, session: Session = NEW_SESSION) -> APIResponse:
     """Update the specific DAG."""
@@ -119,7 +160,7 @@ def patch_dag(*, dag_id: str, update_mask: UpdateMask = None, session: Session =
             raise BadRequest(detail="Only `is_paused` field can be updated through the REST API")
         patch_body_[update_mask[0]] = patch_body[update_mask[0]]
         patch_body = patch_body_
-    dag = session.query(DagModel).filter(DagModel.dag_id == dag_id).one_or_none()
+    dag = session.scalar(select(DagModel).where(DagModel.dag_id == dag_id))
     if not dag:
         raise NotFound(f"Dag with id: '{dag_id}' not found")
     dag.is_paused = patch_body["is_paused"]
@@ -127,8 +168,10 @@ def patch_dag(*, dag_id: str, update_mask: UpdateMask = None, session: Session =
     return dag_schema.dump(dag)
 
 
-@security.requires_access([(permissions.ACTION_CAN_EDIT, permissions.RESOURCE_DAG)])
+@mark_fastapi_migration_done
+@security.requires_access_dag("PUT")
 @format_parameters({"limit": check_limit})
+@action_logging
 @provide_session
 def patch_dags(limit, session, offset=0, only_active=True, tags=None, dag_id_pattern=None, update_mask=None):
     """Patch multiple DAGs."""
@@ -143,28 +186,32 @@ def patch_dags(limit, session, offset=0, only_active=True, tags=None, dag_id_pat
         update_mask = update_mask[0]
         patch_body_[update_mask] = patch_body[update_mask]
         patch_body = patch_body_
+    dags_query = select(DagModel)
     if only_active:
-        dags_query = session.query(DagModel).filter(~DagModel.is_subdag, DagModel.is_active)
-    else:
-        dags_query = session.query(DagModel).filter(~DagModel.is_subdag)
+        dags_query = dags_query.where(DagModel.is_active)
 
     if dag_id_pattern == "~":
         dag_id_pattern = "%"
-    dags_query = dags_query.filter(DagModel.dag_id.ilike(f"%{dag_id_pattern}%"))
-    editable_dags = get_airflow_app().appbuilder.sm.get_editable_dag_ids(g.user)
+    dags_query = dags_query.where(DagModel.dag_id.ilike(f"%{dag_id_pattern}%"))
+    editable_dags = get_auth_manager().get_permitted_dag_ids(
+        methods=["PUT"], user=get_auth_manager().get_user()
+    )
 
-    dags_query = dags_query.filter(DagModel.dag_id.in_(editable_dags))
+    dags_query = dags_query.where(DagModel.dag_id.in_(editable_dags))
     if tags:
         cond = [DagModel.tags.any(DagTag.name == tag) for tag in tags]
-        dags_query = dags_query.filter(or_(*cond))
+        dags_query = dags_query.where(or_(*cond))
 
-    total_entries = dags_query.count()
+    total_entries = get_query_count(dags_query, session=session)
 
-    dags = dags_query.order_by(DagModel.dag_id).offset(offset).limit(limit).all()
+    dags = session.scalars(dags_query.order_by(DagModel.dag_id).offset(offset).limit(limit)).all()
 
     dags_to_update = {dag.dag_id for dag in dags}
-    session.query(DagModel).filter(DagModel.dag_id.in_(dags_to_update)).update(
-        {DagModel.is_paused: patch_body["is_paused"]}, synchronize_session="fetch"
+    session.execute(
+        update(DagModel)
+        .where(DagModel.dag_id.in_(dags_to_update))
+        .values(is_paused=patch_body["is_paused"])
+        .execution_options(synchronize_session="fetch")
     )
 
     session.flush()
@@ -172,7 +219,9 @@ def patch_dags(limit, session, offset=0, only_active=True, tags=None, dag_id_pat
     return dags_collection_schema.dump(DAGCollection(dags=dags, total_entries=total_entries))
 
 
-@security.requires_access([(permissions.ACTION_CAN_DELETE, permissions.RESOURCE_DAG)])
+@mark_fastapi_migration_done
+@security.requires_access_dag("DELETE")
+@action_logging
 @provide_session
 def delete_dag(dag_id: str, session: Session = NEW_SESSION) -> APIResponse:
     """Delete the specific DAG."""

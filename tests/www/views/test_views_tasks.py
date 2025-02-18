@@ -19,33 +19,42 @@ from __future__ import annotations
 
 import html
 import json
-import re
 import unittest.mock
 import urllib.parse
 from getpass import getuser
+from unittest import mock
 
+import pendulum
 import pytest
 import time_machine
 
 from airflow import settings
-from airflow.exceptions import AirflowException
-from airflow.executors.celery_executor import CeleryExecutor
-from airflow.models import DAG, DagBag, DagModel, TaskFail, TaskInstance, TaskReschedule
-from airflow.models.dagcode import DagCode
-from airflow.operators.bash import BashOperator
-from airflow.security import permissions
+from airflow.models.dag import DAG
+from airflow.models.taskinstance import TaskInstance
+from airflow.models.taskreschedule import TaskReschedule
+from airflow.models.xcom import XCom
+from airflow.providers.celery.executors.celery_executor import CeleryExecutor
+from airflow.providers.standard.operators.empty import EmptyOperator
 from airflow.utils import timezone
 from airflow.utils.log.logging_mixin import ExternalLoggingMixin
 from airflow.utils.session import create_session
-from airflow.utils.state import State
-from airflow.utils.types import DagRunType
-from airflow.www.views import TaskInstanceModelView
-from tests.test_utils.api_connexion_utils import create_user, delete_roles, delete_user
-from tests.test_utils.config import conf_vars
-from tests.test_utils.db import clear_db_runs
-from tests.test_utils.www import check_content_in_response, check_content_not_in_response, client_with_login
+from airflow.utils.state import DagRunState, State
+from airflow.utils.types import DagRunTriggeredByType, DagRunType
+from airflow.www.views import TaskInstanceModelView, _safe_parse_datetime
+
+from tests_common.test_utils.compat import BashOperator
+from tests_common.test_utils.config import conf_vars
+from tests_common.test_utils.db import clear_db_runs, clear_db_xcom
+from tests_common.test_utils.www import (
+    capture_templates,  # noqa: F401
+    check_content_in_response,
+    check_content_not_in_response,
+)
+
+pytestmark = pytest.mark.db_test
 
 DEFAULT_DATE = timezone.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+STR_DEFAULT_DATE = urllib.parse.quote(DEFAULT_DATE.strftime("%Y-%m-%dT%H:%M:%S.%f%z"))
 
 DEFAULT_VAL = urllib.parse.quote_plus(str(DEFAULT_DATE))
 
@@ -53,74 +62,74 @@ DEFAULT_DAGRUN = "TEST_DAGRUN"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def reset_dagruns():
+def _reset_dagruns():
     """Clean up stray garbage from other tests."""
     clear_db_runs()
 
 
 @pytest.fixture(autouse=True)
-def init_dagruns(app, reset_dagruns):
+def _init_dagruns(app):
     with time_machine.travel(DEFAULT_DATE, tick=False):
         app.dag_bag.get_dag("example_bash_operator").create_dagrun(
             run_id=DEFAULT_DAGRUN,
             run_type=DagRunType.SCHEDULED,
-            execution_date=DEFAULT_DATE,
+            logical_date=DEFAULT_DATE,
             data_interval=(DEFAULT_DATE, DEFAULT_DATE),
+            run_after=DEFAULT_DATE,
+            triggered_by=DagRunTriggeredByType.TEST,
             start_date=timezone.utcnow(),
             state=State.RUNNING,
         )
-        app.dag_bag.get_dag("example_subdag_operator").create_dagrun(
+        app.dag_bag.get_dag("example_python_operator").create_dagrun(
             run_id=DEFAULT_DAGRUN,
             run_type=DagRunType.SCHEDULED,
-            execution_date=DEFAULT_DATE,
+            logical_date=DEFAULT_DATE,
             data_interval=(DEFAULT_DATE, DEFAULT_DATE),
+            run_after=DEFAULT_DATE,
+            triggered_by=DagRunTriggeredByType.TEST,
             start_date=timezone.utcnow(),
             state=State.RUNNING,
+        )
+        XCom.set(
+            key="return_value",
+            value="{'x':1}",
+            task_id="runme_0",
+            dag_id="example_bash_operator",
+            run_id=DEFAULT_DAGRUN,
         )
         app.dag_bag.get_dag("example_xcom").create_dagrun(
             run_id=DEFAULT_DAGRUN,
             run_type=DagRunType.SCHEDULED,
-            execution_date=DEFAULT_DATE,
+            logical_date=DEFAULT_DATE,
             data_interval=(DEFAULT_DATE, DEFAULT_DATE),
+            run_after=DEFAULT_DATE,
+            triggered_by=DagRunTriggeredByType.TEST,
             start_date=timezone.utcnow(),
             state=State.RUNNING,
         )
         app.dag_bag.get_dag("latest_only").create_dagrun(
             run_id=DEFAULT_DAGRUN,
             run_type=DagRunType.SCHEDULED,
-            execution_date=DEFAULT_DATE,
+            logical_date=DEFAULT_DATE,
             data_interval=(DEFAULT_DATE, DEFAULT_DATE),
+            run_after=DEFAULT_DATE,
+            triggered_by=DagRunTriggeredByType.TEST,
+            start_date=timezone.utcnow(),
+            state=State.RUNNING,
+        )
+        app.dag_bag.get_dag("example_task_group").create_dagrun(
+            run_id=DEFAULT_DAGRUN,
+            run_type=DagRunType.SCHEDULED,
+            logical_date=DEFAULT_DATE,
+            data_interval=(DEFAULT_DATE, DEFAULT_DATE),
+            run_after=DEFAULT_DATE,
+            triggered_by=DagRunTriggeredByType.TEST,
             start_date=timezone.utcnow(),
             state=State.RUNNING,
         )
     yield
     clear_db_runs()
-
-
-@pytest.fixture(scope="module")
-def client_ti_without_dag_edit(app):
-    create_user(
-        app,
-        username="all_ti_permissions_except_dag_edit",
-        role_name="all_ti_permissions_except_dag_edit",
-        permissions=[
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG),
-            (permissions.ACTION_CAN_CREATE, permissions.RESOURCE_TASK_INSTANCE),
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_TASK_INSTANCE),
-            (permissions.ACTION_CAN_EDIT, permissions.RESOURCE_TASK_INSTANCE),
-            (permissions.ACTION_CAN_DELETE, permissions.RESOURCE_TASK_INSTANCE),
-            (permissions.ACTION_CAN_ACCESS_MENU, permissions.RESOURCE_TASK_INSTANCE),
-        ],
-    )
-
-    yield client_with_login(
-        app,
-        username="all_ti_permissions_except_dag_edit",
-        password="all_ti_permissions_except_dag_edit",
-    )
-
-    delete_user(app, username="all_ti_permissions_except_dag_edit")  # type: ignore
-    delete_roles(app)
+    clear_db_xcom()
 
 
 @pytest.mark.parametrize(
@@ -135,55 +144,50 @@ def client_ti_without_dag_edit(app):
             id="delete-dag-button-normal",
         ),
         pytest.param(
-            f"task?task_id=runme_0&dag_id=example_bash_operator&execution_date={DEFAULT_VAL}",
+            f"task?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}",
+            ["Grid"],
+            id="task-grid-button",
+        ),
+        pytest.param(
+            f"task?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}",
             ["Task Instance Details"],
             id="task",
         ),
         pytest.param(
-            f"xcom?task_id=runme_0&dag_id=example_bash_operator&execution_date={DEFAULT_VAL}",
+            f"log?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}",
+            ["Grid"],
+            id="log-grid-button",
+        ),
+        pytest.param(
+            f"xcom?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}",
             ["XCom"],
             id="xcom",
         ),
+        pytest.param(
+            f"xcom?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}",
+            ["Grid"],
+            id="xcom-grid-button",
+        ),
         pytest.param("xcom/list", ["List XComs"], id="xcom-list"),
         pytest.param(
-            f"rendered-templates?task_id=runme_0&dag_id=example_bash_operator&execution_date={DEFAULT_VAL}",
+            f"rendered-templates?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}",
             ["Rendered Template"],
             id="rendered-templates",
         ),
         pytest.param(
-            "dag_details?dag_id=example_bash_operator",
-            ["DAG Details"],
-            id="dag-details-url-param",
+            f"rendered-templates?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}",
+            ["Grid"],
+            id="rendered-templates-grid-button",
         ),
         pytest.param(
-            "dag_details?dag_id=example_subdag_operator.section-1",
-            ["DAG Details"],
-            id="dag-details-subdag-url-param",
-        ),
-        pytest.param(
-            "dags/example_subdag_operator.section-1/details",
-            ["DAG Details"],
-            id="dag-details-subdag",
-        ),
-        pytest.param(
-            "graph?dag_id=example_bash_operator",
+            "object/graph_data?dag_id=example_bash_operator",
             ["runme_1"],
-            id="graph-url-param",
-        ),
-        pytest.param(
-            "dags/example_bash_operator/graph",
-            ["runme_1"],
-            id="graph",
+            id="graph-data",
         ),
         pytest.param(
             "object/grid_data?dag_id=example_bash_operator",
             ["runme_1"],
             id="grid-data",
-        ),
-        pytest.param(
-            "object/grid_data?dag_id=example_subdag_operator.section-1",
-            ["section-1-task-1"],
-            id="grid-data-subdag",
         ),
         pytest.param(
             "duration?days=30&dag_id=example_bash_operator",
@@ -290,12 +294,12 @@ def client_ti_without_dag_edit(app):
         pytest.param(
             f"confirm?task_id=runme_0&dag_id=example_bash_operator&state=success"
             f"&dag_run_id={DEFAULT_DAGRUN}",
-            ["Wait a minute"],
+            ["Please confirm"],
             id="confirm-success",
         ),
         pytest.param(
             f"confirm?task_id=runme_0&dag_id=example_bash_operator&state=failed&dag_run_id={DEFAULT_DAGRUN}",
-            ["Wait a minute"],
+            ["Please confirm"],
             id="confirm-failed",
         ),
         pytest.param(
@@ -323,8 +327,28 @@ def test_views_get(admin_client, url, contents):
         check_content_in_response(content, resp)
 
 
+def test_xcom_return_value_is_not_bytes(admin_client):
+    url = f"xcom?dag_id=example_bash_operator&task_id=runme_0&logical_date={DEFAULT_VAL}&map_index=-1"
+    resp = admin_client.get(url, follow_redirects=True)
+    # check that {"x":1} is in the response
+    content = "{&#39;x&#39;:1}"
+    check_content_in_response(content, resp)
+    # check that b'{"x":1}' is not in the response
+    content = "b&#39;&#34;{\\&#39;x\\&#39;:1}&#34;&#39;"
+    check_content_not_in_response(content, resp)
+
+
+def test_rendered_task_view(admin_client):
+    url = f"task?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}"
+    resp = admin_client.get(url, follow_redirects=True)
+    resp_html = resp.data.decode("utf-8")
+    assert resp.status_code == 200
+    assert "<td>_try_number</td>" not in resp_html
+    assert "<td>try_number</td>" in resp_html
+
+
 def test_rendered_k8s(admin_client):
-    url = f"rendered-k8s?task_id=runme_0&dag_id=example_bash_operator&execution_date={DEFAULT_VAL}"
+    url = f"rendered-k8s?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}"
     with unittest.mock.patch.object(settings, "IS_K8S_OR_K8SCELERY_EXECUTOR", True):
         resp = admin_client.get(url, follow_redirects=True)
         check_content_in_response("K8s Pod Spec", resp)
@@ -332,56 +356,68 @@ def test_rendered_k8s(admin_client):
 
 @conf_vars({("core", "executor"): "LocalExecutor"})
 def test_rendered_k8s_without_k8s(admin_client):
-    url = f"rendered-k8s?task_id=runme_0&dag_id=example_bash_operator&execution_date={DEFAULT_VAL}"
+    url = f"rendered-k8s?task_id=runme_0&dag_id=example_bash_operator&logical_date={DEFAULT_VAL}"
     resp = admin_client.get(url, follow_redirects=True)
-    assert 404 == resp.status_code
+    assert resp.status_code == 404
 
 
 def test_tree_trigger_origin_tree_view(app, admin_client):
-    app.dag_bag.get_dag("test_tree_view").create_dagrun(
+    clear_db_runs()
+    app.dag_bag.get_dag("example_bash_operator").create_dagrun(
+        run_id="test",
         run_type=DagRunType.SCHEDULED,
-        execution_date=DEFAULT_DATE,
+        logical_date=DEFAULT_DATE,
         data_interval=(DEFAULT_DATE, DEFAULT_DATE),
+        run_after=DEFAULT_DATE,
+        triggered_by=DagRunTriggeredByType.TEST,
         start_date=timezone.utcnow(),
         state=State.RUNNING,
     )
 
-    url = "tree?dag_id=test_tree_view"
+    url = "tree?dag_id=example_bash_operator"
     resp = admin_client.get(url, follow_redirects=True)
-    params = {"origin": "/dags/test_tree_view/grid"}
-    href = f"/dags/test_tree_view/trigger?{html.escape(urllib.parse.urlencode(params))}"
+    params = {"origin": "/dags/example_bash_operator/grid"}
+    href = f"/dags/example_bash_operator/trigger?{html.escape(urllib.parse.urlencode(params))}"
     check_content_in_response(href, resp)
 
 
-def test_graph_trigger_origin_graph_view(app, admin_client):
-    app.dag_bag.get_dag("test_tree_view").create_dagrun(
+def test_graph_trigger_origin_grid_view(app, admin_client):
+    clear_db_runs()
+    app.dag_bag.get_dag("example_bash_operator").create_dagrun(
+        run_id="test",
         run_type=DagRunType.SCHEDULED,
-        execution_date=DEFAULT_DATE,
+        logical_date=DEFAULT_DATE,
         data_interval=(DEFAULT_DATE, DEFAULT_DATE),
+        run_after=DEFAULT_DATE,
+        triggered_by=DagRunTriggeredByType.TEST,
         start_date=timezone.utcnow(),
         state=State.RUNNING,
     )
 
-    url = "/dags/test_tree_view/graph"
+    url = "/dags/example_bash_operator/graph"
     resp = admin_client.get(url, follow_redirects=True)
-    params = {"origin": "/dags/test_tree_view/graph"}
-    href = f"/dags/test_tree_view/trigger?{html.escape(urllib.parse.urlencode(params))}"
+    params = {"origin": "/dags/example_bash_operator/grid?tab=graph"}
+    href = f"/dags/example_bash_operator/trigger?{html.escape(urllib.parse.urlencode(params))}"
     check_content_in_response(href, resp)
 
 
-def test_dag_details_trigger_origin_dag_details_view(app, admin_client):
-    app.dag_bag.get_dag("test_graph_view").create_dagrun(
+def test_gantt_trigger_origin_grid_view(app, admin_client):
+    clear_db_runs()
+    app.dag_bag.get_dag("example_bash_operator").create_dagrun(
+        run_id="test",
         run_type=DagRunType.SCHEDULED,
-        execution_date=DEFAULT_DATE,
+        logical_date=DEFAULT_DATE,
         data_interval=(DEFAULT_DATE, DEFAULT_DATE),
+        run_after=DEFAULT_DATE,
+        triggered_by=DagRunTriggeredByType.TEST,
         start_date=timezone.utcnow(),
         state=State.RUNNING,
     )
 
-    url = "/dags/test_graph_view/details"
+    url = "/dags/example_bash_operator/gantt"
     resp = admin_client.get(url, follow_redirects=True)
-    params = {"origin": "/dags/test_graph_view/details"}
-    href = f"/dags/test_graph_view/trigger?{html.escape(urllib.parse.urlencode(params))}"
+    params = {"origin": "/dags/example_bash_operator/grid?tab=gantt"}
+    href = f"/dags/example_bash_operator/trigger?{html.escape(urllib.parse.urlencode(params))}"
     check_content_in_response(href, resp)
 
 
@@ -392,45 +428,25 @@ def test_last_dagruns(admin_client):
 
 def test_last_dagruns_success_when_selecting_dags(admin_client):
     resp = admin_client.post(
-        "last_dagruns", data={"dag_ids": ["example_subdag_operator"]}, follow_redirects=True
+        "last_dagruns", data={"dag_ids": ["example_python_operator"]}, follow_redirects=True
     )
     assert resp.status_code == 200
     stats = json.loads(resp.data.decode("utf-8"))
     assert "example_bash_operator" not in stats
-    assert "example_subdag_operator" in stats
+    assert "example_python_operator" in stats
 
     # Multiple
     resp = admin_client.post(
         "last_dagruns",
-        data={"dag_ids": ["example_subdag_operator", "example_bash_operator"]},
+        data={"dag_ids": ["example_python_operator", "example_bash_operator"]},
         follow_redirects=True,
     )
     stats = json.loads(resp.data.decode("utf-8"))
     assert "example_bash_operator" in stats
-    assert "example_subdag_operator" in stats
     check_content_not_in_response("example_xcom", resp)
 
 
 def test_code(admin_client):
-    url = "code?dag_id=example_bash_operator"
-    resp = admin_client.get(url, follow_redirects=True)
-    check_content_not_in_response("Failed to load DAG file Code", resp)
-    check_content_in_response("example_bash_operator", resp)
-
-
-def test_code_from_db(admin_client):
-    dag = DagBag(include_examples=True).get_dag("example_bash_operator")
-    DagCode(dag.fileloc, DagCode._get_code_from_file(dag.fileloc)).sync_to_db()
-    url = "code?dag_id=example_bash_operator"
-    resp = admin_client.get(url, follow_redirects=True)
-    check_content_not_in_response("Failed to load DAG file Code", resp)
-    check_content_in_response("example_bash_operator", resp)
-
-
-def test_code_from_db_all_example_dags(admin_client):
-    dagbag = DagBag(include_examples=True)
-    for dag in dagbag.dags.values():
-        DagCode(dag.fileloc, DagCode._get_code_from_file(dag.fileloc)).sync_to_db()
     url = "code?dag_id=example_bash_operator"
     resp = admin_client.get(url, follow_redirects=True)
     check_content_not_in_response("Failed to load DAG file Code", resp)
@@ -474,7 +490,7 @@ def test_code_from_db_all_example_dags(admin_client):
             dict(
                 task_id="runme_1",
                 dag_id="example_bash_operator",
-                execution_date=DEFAULT_DATE,
+                logical_date=DEFAULT_DATE,
                 upstream="false",
                 downstream="false",
                 future="false",
@@ -483,12 +499,27 @@ def test_code_from_db_all_example_dags(admin_client):
             ),
             "example_bash_operator",
         ),
+        (
+            "clear",
+            dict(
+                group_id="section_1",
+                dag_id="example_task_group",
+                logical_date=DEFAULT_DATE,
+                upstream="false",
+                downstream="false",
+                future="false",
+                past="false",
+                only_failed="false",
+            ),
+            "example_task_group",
+        ),
     ],
     ids=[
         "paused",
         "failed-flash-hint",
         "success-flash-hint",
         "clear",
+        "clear-task-group",
     ],
 )
 def test_views_post(admin_client, url, data, content):
@@ -502,7 +533,7 @@ def test_dag_never_run(admin_client, url):
     form = dict(
         task_id="run_this_last",
         dag_id=dag_id,
-        execution_date=DEFAULT_DATE,
+        logical_date=DEFAULT_DATE,
         upstream="false",
         downstream="false",
         future="false",
@@ -519,73 +550,25 @@ class _ForceHeartbeatCeleryExecutor(CeleryExecutor):
         return True
 
 
-@pytest.fixture()
-def new_id_example_bash_operator():
-    dag_id = "example_bash_operator"
-    test_dag_id = "non_existent_dag"
-    with create_session() as session:
-        dag_query = session.query(DagModel).filter(DagModel.dag_id == dag_id)
-        dag_query.first().tags = []  # To avoid "FOREIGN KEY constraint" error)
-    with create_session() as session:
-        dag_query.update({"dag_id": test_dag_id})
-    yield test_dag_id
-    with create_session() as session:
-        session.query(DagModel).filter(DagModel.dag_id == test_dag_id).update({"dag_id": dag_id})
-
-
-def test_delete_dag_button_for_dag_on_scheduler_only(admin_client, new_id_example_bash_operator):
-    # Test for JIRA AIRFLOW-3233 (PR 4069):
-    # The delete-dag URL should be generated correctly for DAGs
-    # that exist on the scheduler (DB) but not the webserver DagBag
-    test_dag_id = new_id_example_bash_operator
+def test_delete_dag_button_for_dag_on_scheduler_only(admin_client, dag_maker):
+    with dag_maker() as dag:
+        EmptyOperator(task_id="task")
+    dag_maker.sync_dagbag_to_db()
+    # The delete-dag URL should be generated correctly
+    test_dag_id = dag.dag_id
     resp = admin_client.get("/", follow_redirects=True)
     check_content_in_response(f"/delete?dag_id={test_dag_id}", resp)
     check_content_in_response(f"return confirmDeleteDag(this, '{test_dag_id}')", resp)
 
 
-@pytest.fixture()
-def new_dag_to_delete():
-    dag = DAG("new_dag_to_delete", is_paused_upon_creation=True)
+@pytest.fixture
+def new_dag_to_delete(testing_dag_bundle):
+    dag = DAG(
+        "new_dag_to_delete", is_paused_upon_creation=True, schedule="0 * * * *", start_date=DEFAULT_DATE
+    )
     session = settings.Session()
-    dag.sync_to_db(session=session)
+    DAG.bulk_write_to_db("testing", None, [dag], session=session)
     return dag
-
-
-@pytest.fixture()
-def per_dag_perm_user_client(app, new_dag_to_delete):
-    sm = app.appbuilder.sm
-    perm = f"{permissions.RESOURCE_DAG_PREFIX}{new_dag_to_delete.dag_id}"
-
-    sm.create_permission(permissions.ACTION_CAN_DELETE, perm)
-
-    create_user(
-        app,
-        username="test_user_per_dag_perms",
-        role_name="User with some perms",
-        permissions=[
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_DAG),
-            (permissions.ACTION_CAN_DELETE, perm),
-            (permissions.ACTION_CAN_READ, permissions.RESOURCE_WEBSITE),
-        ],
-    )
-
-    sm.find_user(username="test_user_per_dag_perms")
-
-    yield client_with_login(
-        app,
-        username="test_user_per_dag_perms",
-        password="test_user_per_dag_perms",
-    )
-
-    delete_user(app, username="test_user_per_dag_perms")  # type: ignore
-    delete_roles(app)
-
-
-def test_delete_just_dag_per_dag_permissions(new_dag_to_delete, per_dag_perm_user_client):
-    resp = per_dag_perm_user_client.post(
-        f"delete?dag_id={new_dag_to_delete.dag_id}&next=/home", follow_redirects=True
-    )
-    check_content_in_response(f"Deleting DAG with id {new_dag_to_delete.dag_id}.", resp)
 
 
 def test_delete_just_dag_resource_permissions(new_dag_to_delete, user_client):
@@ -594,7 +577,11 @@ def test_delete_just_dag_resource_permissions(new_dag_to_delete, user_client):
 
 
 @pytest.mark.parametrize("endpoint", ["graph", "tree"])
-def test_show_external_log_redirect_link_with_local_log_handler(capture_templates, admin_client, endpoint):
+def test_show_external_log_redirect_link_with_local_log_handler(
+    capture_templates,  # noqa: F811
+    admin_client,
+    endpoint,
+):
     """Do not show external links if log handler is local."""
     url = f"{endpoint}?dag_id=example_bash_operator"
     with capture_templates() as templates:
@@ -627,7 +614,10 @@ class _ExternalHandler(ExternalLoggingMixin):
     return_value=_ExternalHandler(),
 )
 def test_show_external_log_redirect_link_with_external_log_handler(
-    _, capture_templates, admin_client, endpoint
+    _,
+    capture_templates,  # noqa: F811
+    admin_client,
+    endpoint,
 ):
     """Show external links if log handler is external."""
     url = f"{endpoint}?dag_id=example_bash_operator"
@@ -645,7 +635,10 @@ def test_show_external_log_redirect_link_with_external_log_handler(
     return_value=_ExternalHandler(),
 )
 def test_external_log_redirect_link_with_external_log_handler_not_shown(
-    _external_handler, capture_templates, admin_client, endpoint
+    _external_handler,
+    capture_templates,  # noqa: F811
+    admin_client,
+    endpoint,
 ):
     """Show external links if log handler is external."""
     _external_handler.return_value._supports_external_link = False
@@ -667,6 +660,7 @@ def _get_appbuilder_pk_string(model_view_cls, instance) -> str:
     Example usage::
 
         from airflow.www.views import TaskInstanceModelView
+
         ti = session.Query(TaskInstance).filter(...).one()
         pk = _get_appbuilder_pk_string(TaskInstanceModelView, ti)
         client.post("...", data={"action": "...", "rowid": pk})
@@ -678,7 +672,7 @@ def _get_appbuilder_pk_string(model_view_cls, instance) -> str:
 def test_task_instance_delete(session, admin_client, create_task_instance):
     task_instance_to_delete = create_task_instance(
         task_id="test_task_instance_delete",
-        execution_date=timezone.utcnow(),
+        logical_date=timezone.utcnow(),
         state=State.DEFERRED,
     )
     composite_key = _get_appbuilder_pk_string(TaskInstanceModelView, task_instance_to_delete)
@@ -687,23 +681,6 @@ def test_task_instance_delete(session, admin_client, create_task_instance):
     assert session.query(TaskInstance).filter(TaskInstance.task_id == task_id).count() == 1
     admin_client.post(f"/taskinstance/delete/{composite_key}", follow_redirects=True)
     assert session.query(TaskInstance).filter(TaskInstance.task_id == task_id).count() == 0
-
-
-def test_task_instance_delete_permission_denied(session, client_ti_without_dag_edit, create_task_instance):
-    task_instance_to_delete = create_task_instance(
-        task_id="test_task_instance_delete_permission_denied",
-        execution_date=timezone.utcnow(),
-        state=State.DEFERRED,
-        session=session,
-    )
-    session.commit()
-    composite_key = _get_appbuilder_pk_string(TaskInstanceModelView, task_instance_to_delete)
-    task_id = task_instance_to_delete.task_id
-
-    assert session.query(TaskInstance).filter(TaskInstance.task_id == task_id).count() == 1
-    resp = client_ti_without_dag_edit.post(f"/taskinstance/delete/{composite_key}", follow_redirects=True)
-    check_content_in_response(f"Access denied for dag_id {task_instance_to_delete.dag_id}", resp)
-    assert session.query(TaskInstance).filter(TaskInstance.task_id == task_id).count() == 1
 
 
 @pytest.mark.parametrize(
@@ -732,15 +709,73 @@ def test_task_instance_clear(session, request, client_fixture, should_succeed):
         data={"action": "clear", "rowid": rowid},
         follow_redirects=True,
     )
-    assert resp.status_code == (200 if should_succeed else 404)
+    assert resp.status_code == 200
+    if not should_succeed and client_fixture != "anonymous_client":
+        check_content_in_response("Access is Denied", resp)
 
     # Now the state should be None.
     state = session.query(TaskInstance.state).filter(TaskInstance.task_id == task_id).scalar()
     assert state == (State.NONE if should_succeed else initial_state)
 
 
+def test_task_instance_clear_downstream(session, admin_client, dag_maker):
+    """Ensures clearing a task instance clears its downstream dependencies exclusively"""
+    with dag_maker(
+        dag_id="test_dag_id",
+        serialized=True,
+        session=session,
+        start_date=pendulum.DateTime(2023, 1, 1, 0, 0, 0, tzinfo=pendulum.UTC),
+    ):
+        EmptyOperator(task_id="task_1") >> EmptyOperator(task_id="task_2")
+        EmptyOperator(task_id="task_3")
+    run1 = dag_maker.create_dagrun(
+        run_id="run_1",
+        state=DagRunState.SUCCESS,
+        run_type=DagRunType.SCHEDULED,
+        logical_date=dag_maker.dag.start_date,
+        start_date=dag_maker.dag.start_date,
+        session=session,
+    )
+
+    run2 = dag_maker.create_dagrun(
+        run_id="run_2",
+        state=DagRunState.SUCCESS,
+        run_type=DagRunType.SCHEDULED,
+        logical_date=dag_maker.dag.start_date.add(days=1),
+        start_date=dag_maker.dag.start_date.add(days=1),
+        session=session,
+    )
+
+    for run in (run1, run2):
+        for ti in run.task_instances:
+            ti.state = State.SUCCESS
+
+    # Clear task_1 from dag run 1
+    run1_ti1 = run1.get_task_instance(task_id="task_1")
+    rowid = _get_appbuilder_pk_string(TaskInstanceModelView, run1_ti1)
+    resp = admin_client.post(
+        "/taskinstance/action_post",
+        data={"action": "clear_downstream", "rowid": rowid},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+
+    # Assert that task_1 and task_2 of dag run 1 are cleared, but task_3 is left untouched
+    run1_ti1.refresh_from_db(session=session)
+    run1_ti2 = run1.get_task_instance(task_id="task_2")
+    run1_ti3 = run1.get_task_instance(task_id="task_3")
+
+    assert run1_ti1.state == State.NONE
+    assert run1_ti2.state == State.NONE
+    assert run1_ti3.state == State.SUCCESS
+
+    # Assert that task_1 of dag run 2 is left untouched
+    run2_ti1 = run2.get_task_instance(task_id="task_1")
+    assert run2_ti1.state == State.SUCCESS
+
+
 def test_task_instance_clear_failure(admin_client):
-    rowid = '["12345"]'  # F.A.B. crashes if the rowid is *too* invalid.
+    rowid = "00000000-0000-0000-0000-000000000000"  # F.A.B. crashes if the rowid is *too* invalid.
     resp = admin_client.post(
         "/taskinstance/action_post",
         data={"action": "clear", "rowid": rowid},
@@ -753,13 +788,12 @@ def test_task_instance_clear_failure(admin_client):
 @pytest.mark.parametrize(
     "action, expected_state",
     [
-        ("set_running", State.RUNNING),
         ("set_failed", State.FAILED),
         ("set_success", State.SUCCESS),
         ("set_retry", State.UP_FOR_RETRY),
         ("set_skipped", State.SKIPPED),
     ],
-    ids=["running", "failed", "success", "retry", "skipped"],
+    ids=["failed", "success", "retry", "skipped"],
 )
 def test_task_instance_set_state(session, admin_client, action, expected_state):
     task_id = "runme_0"
@@ -782,7 +816,6 @@ def test_task_instance_set_state(session, admin_client, action, expected_state):
 @pytest.mark.parametrize(
     "action",
     [
-        "set_running",
         "set_failed",
         "set_success",
         "set_retry",
@@ -790,7 +823,7 @@ def test_task_instance_set_state(session, admin_client, action, expected_state):
     ],
 )
 def test_task_instance_set_state_failure(admin_client, action):
-    rowid = '["12345"]'  # F.A.B. crashes if the rowid is *too* invalid.
+    rowid = "00000000-0000-0000-0000-000000000000"  # F.A.B. crashes if the rowid is *too* invalid.
     resp = admin_client.post(
         "/taskinstance/action_post",
         data={"action": action, "rowid": rowid},
@@ -800,15 +833,8 @@ def test_task_instance_set_state_failure(admin_client, action):
     check_content_in_response("Failed to set state", resp)
 
 
-@pytest.mark.parametrize(
-    "task_search_tuples",
-    [
-        [("example_xcom", "bash_push"), ("example_bash_operator", "run_this_last")],
-        [("example_subdag_operator", "some-other-task")],
-    ],
-    ids=["multiple_tasks", "one_task"],
-)
-def test_action_muldelete_task_instance(session, admin_client, task_search_tuples):
+def test_action_muldelete_task_instance(session, admin_client):
+    task_search_tuples = [("example_xcom", "bash_push"), ("example_bash_operator", "run_this_last")]
     # get task instances to delete
     tasks_to_delete = []
     for task_search_tuple in task_search_tuples:
@@ -822,7 +848,8 @@ def test_action_muldelete_task_instance(session, admin_client, task_search_tuple
     # add task reschedules for those tasks to make sure that the delete cascades to the required tables
     trs = [
         TaskReschedule(
-            task=task,
+            task_id=task.task_id,
+            dag_id=task.dag_id,
             run_id=task.run_id,
             try_number=1,
             start_date=timezone.datetime(2021, 1, 1),
@@ -857,55 +884,11 @@ def test_action_muldelete_task_instance(session, admin_client, task_search_tuple
     assert session.query(TaskReschedule).count() == 0
 
 
-def test_task_fail_duration(app, admin_client, dag_maker, session):
-    """Task duration page with a TaskFail entry should render without error."""
-    with dag_maker() as dag:
-        op1 = BashOperator(task_id="fail", bash_command="exit 1")
-        op2 = BashOperator(task_id="success", bash_command="exit 0")
-
-    with pytest.raises(AirflowException):
-        op1.run()
-    op2.run()
-
-    op1_fails = (
-        session.query(TaskFail)
-        .filter(
-            TaskFail.task_id == "fail",
-            TaskFail.dag_id == dag.dag_id,
-        )
-        .all()
-    )
-
-    op2_fails = (
-        session.query(TaskFail)
-        .filter(
-            TaskFail.task_id == "success",
-            TaskFail.dag_id == dag.dag_id,
-        )
-        .all()
-    )
-
-    assert len(op1_fails) == 1
-    assert len(op2_fails) == 0
-
-    with unittest.mock.patch.object(app, "dag_bag") as mocked_dag_bag:
-        mocked_dag_bag.get_dag.return_value = dag
-        resp = admin_client.get(f"dags/{dag.dag_id}/duration", follow_redirects=True)
-        html = resp.get_data().decode()
-        cumulative_chart = json.loads(re.search("data_cumlinechart=(.*);", html).group(1))
-        line_chart = json.loads(re.search("data_linechart=(.*);", html).group(1))
-
-        assert resp.status_code == 200
-        assert sorted(item["key"] for item in cumulative_chart) == ["fail", "success"]
-        assert sorted(item["key"] for item in line_chart) == ["fail", "success"]
-
-
 def test_graph_view_doesnt_fail_on_recursion_error(app, dag_maker, admin_client):
     """Test that the graph view doesn't fail on a recursion error."""
     from airflow.models.baseoperator import chain
 
     with dag_maker("test_fails_with_recursion") as dag:
-
         tasks = [
             BashOperator(
                 task_id=f"task_{i}",
@@ -921,22 +904,56 @@ def test_graph_view_doesnt_fail_on_recursion_error(app, dag_maker, admin_client)
         assert resp.status_code == 200
 
 
+@pytest.mark.flaky(reruns=5)
+def test_get_date_time_num_runs_dag_runs_form_data_graph_view(app, dag_maker, admin_client):
+    """Test the get_date_time_num_runs_dag_runs_form_data function."""
+    from airflow.www.views import get_date_time_num_runs_dag_runs_form_data
+
+    logical_date = pendulum.now(tz="UTC")
+    with dag_maker(
+        dag_id="test_get_date_time_num_runs_dag_runs_form_data",
+        start_date=logical_date,
+    ) as dag:
+        BashOperator(task_id="task_1", bash_command="echo test")
+
+    with unittest.mock.patch.object(app, "dag_bag") as mocked_dag_bag:
+        mocked_dag_bag.get_dag.return_value = dag
+        url = f"/dags/{dag.dag_id}/graph"
+        resp = admin_client.get(url, follow_redirects=True)
+        assert resp.status_code == 200
+
+    with create_session() as session:
+        data = get_date_time_num_runs_dag_runs_form_data(resp.request, session, dag)
+
+        dttm = pendulum.parse(data["dttm"].isoformat())
+        base_date = pendulum.parse(data["base_date"].isoformat())
+
+        assert dttm.date() == logical_date.date()
+        assert dttm.time().hour == _safe_parse_datetime(logical_date.time().isoformat()).time().hour
+        assert dttm.time().minute == _safe_parse_datetime(logical_date.time().isoformat()).time().minute
+        assert base_date.date() == logical_date.date()
+
+
 def test_task_instances(admin_client):
     """Test task_instances view."""
     resp = admin_client.get(
-        f"/object/task_instances?dag_id=example_bash_operator&execution_date={DEFAULT_DATE}",
+        f"/object/task_instances?dag_id=example_bash_operator&logical_date={STR_DEFAULT_DATE}",
         follow_redirects=True,
     )
     assert resp.status_code == 200
     assert resp.json == {
         "also_run_this": {
+            "custom_operator_name": None,
             "dag_id": "example_bash_operator",
             "duration": None,
             "end_date": None,
+            "logical_date": DEFAULT_DATE.isoformat(),
+            "executor": None,
             "executor_config": {},
             "external_executor_id": None,
             "hostname": "",
-            "job_id": None,
+            "id": unittest.mock.ANY,  # Ignore the `id` field
+            "last_heartbeat_at": None,
             "map_index": -1,
             "max_tries": 0,
             "next_kwargs": None,
@@ -949,24 +966,32 @@ def test_task_instances(admin_client):
             "queue": "default",
             "queued_by_job_id": None,
             "queued_dttm": None,
+            "scheduled_dttm": None,
+            "rendered_map_index": None,
             "run_id": "TEST_DAGRUN",
             "start_date": None,
             "state": None,
+            "task_display_name": "also_run_this",
             "task_id": "also_run_this",
             "trigger_id": None,
             "trigger_timeout": None,
-            "try_number": 1,
+            "try_number": 0,
             "unixname": getuser(),
             "updated_at": DEFAULT_DATE.isoformat(),
+            "dag_version_id": mock.ANY,
         },
         "run_after_loop": {
+            "custom_operator_name": None,
             "dag_id": "example_bash_operator",
             "duration": None,
             "end_date": None,
+            "logical_date": DEFAULT_DATE.isoformat(),
+            "executor": None,
             "executor_config": {},
             "external_executor_id": None,
             "hostname": "",
-            "job_id": None,
+            "id": unittest.mock.ANY,  # Ignore the `id` field
+            "last_heartbeat_at": None,
             "map_index": -1,
             "max_tries": 0,
             "next_kwargs": None,
@@ -979,24 +1004,32 @@ def test_task_instances(admin_client):
             "queue": "default",
             "queued_by_job_id": None,
             "queued_dttm": None,
+            "scheduled_dttm": None,
+            "rendered_map_index": None,
             "run_id": "TEST_DAGRUN",
             "start_date": None,
             "state": None,
+            "task_display_name": "run_after_loop",
             "task_id": "run_after_loop",
             "trigger_id": None,
             "trigger_timeout": None,
-            "try_number": 1,
+            "try_number": 0,
             "unixname": getuser(),
             "updated_at": DEFAULT_DATE.isoformat(),
+            "dag_version_id": mock.ANY,
         },
         "run_this_last": {
+            "custom_operator_name": None,
             "dag_id": "example_bash_operator",
             "duration": None,
             "end_date": None,
+            "logical_date": DEFAULT_DATE.isoformat(),
+            "executor": None,
             "executor_config": {},
             "external_executor_id": None,
             "hostname": "",
-            "job_id": None,
+            "id": unittest.mock.ANY,  # Ignore the `id` field
+            "last_heartbeat_at": None,
             "map_index": -1,
             "max_tries": 0,
             "next_kwargs": None,
@@ -1009,24 +1042,32 @@ def test_task_instances(admin_client):
             "queue": "default",
             "queued_by_job_id": None,
             "queued_dttm": None,
+            "scheduled_dttm": None,
+            "rendered_map_index": None,
             "run_id": "TEST_DAGRUN",
             "start_date": None,
             "state": None,
+            "task_display_name": "run_this_last",
             "task_id": "run_this_last",
             "trigger_id": None,
             "trigger_timeout": None,
-            "try_number": 1,
+            "try_number": 0,
             "unixname": getuser(),
             "updated_at": DEFAULT_DATE.isoformat(),
+            "dag_version_id": mock.ANY,
         },
         "runme_0": {
+            "custom_operator_name": None,
             "dag_id": "example_bash_operator",
             "duration": None,
             "end_date": None,
+            "logical_date": DEFAULT_DATE.isoformat(),
+            "executor": None,
             "executor_config": {},
             "external_executor_id": None,
             "hostname": "",
-            "job_id": None,
+            "id": unittest.mock.ANY,  # Ignore the `id` field
+            "last_heartbeat_at": None,
             "map_index": -1,
             "max_tries": 0,
             "next_kwargs": None,
@@ -1039,24 +1080,32 @@ def test_task_instances(admin_client):
             "queue": "default",
             "queued_by_job_id": None,
             "queued_dttm": None,
+            "scheduled_dttm": None,
+            "rendered_map_index": None,
             "run_id": "TEST_DAGRUN",
             "start_date": None,
             "state": None,
+            "task_display_name": "runme_0",
             "task_id": "runme_0",
             "trigger_id": None,
             "trigger_timeout": None,
-            "try_number": 1,
+            "try_number": 0,
             "unixname": getuser(),
             "updated_at": DEFAULT_DATE.isoformat(),
+            "dag_version_id": mock.ANY,
         },
         "runme_1": {
+            "custom_operator_name": None,
             "dag_id": "example_bash_operator",
             "duration": None,
             "end_date": None,
+            "logical_date": DEFAULT_DATE.isoformat(),
+            "executor": None,
             "executor_config": {},
             "external_executor_id": None,
             "hostname": "",
-            "job_id": None,
+            "id": unittest.mock.ANY,  # Ignore the `id` field
+            "last_heartbeat_at": None,
             "map_index": -1,
             "max_tries": 0,
             "next_kwargs": None,
@@ -1069,24 +1118,32 @@ def test_task_instances(admin_client):
             "queue": "default",
             "queued_by_job_id": None,
             "queued_dttm": None,
+            "scheduled_dttm": None,
+            "rendered_map_index": None,
             "run_id": "TEST_DAGRUN",
             "start_date": None,
             "state": None,
+            "task_display_name": "runme_1",
             "task_id": "runme_1",
             "trigger_id": None,
             "trigger_timeout": None,
-            "try_number": 1,
+            "try_number": 0,
             "unixname": getuser(),
             "updated_at": DEFAULT_DATE.isoformat(),
+            "dag_version_id": mock.ANY,
         },
         "runme_2": {
+            "custom_operator_name": None,
             "dag_id": "example_bash_operator",
             "duration": None,
             "end_date": None,
+            "logical_date": DEFAULT_DATE.isoformat(),
+            "executor": None,
             "executor_config": {},
             "external_executor_id": None,
             "hostname": "",
-            "job_id": None,
+            "id": unittest.mock.ANY,  # Ignore the `id` field
+            "last_heartbeat_at": None,
             "map_index": -1,
             "max_tries": 0,
             "next_kwargs": None,
@@ -1099,24 +1156,32 @@ def test_task_instances(admin_client):
             "queue": "default",
             "queued_by_job_id": None,
             "queued_dttm": None,
+            "scheduled_dttm": None,
+            "rendered_map_index": None,
             "run_id": "TEST_DAGRUN",
             "start_date": None,
             "state": None,
+            "task_display_name": "runme_2",
             "task_id": "runme_2",
             "trigger_id": None,
             "trigger_timeout": None,
-            "try_number": 1,
+            "try_number": 0,
             "unixname": getuser(),
             "updated_at": DEFAULT_DATE.isoformat(),
+            "dag_version_id": mock.ANY,
         },
         "this_will_skip": {
+            "custom_operator_name": None,
             "dag_id": "example_bash_operator",
             "duration": None,
             "end_date": None,
+            "logical_date": DEFAULT_DATE.isoformat(),
+            "executor": None,
             "executor_config": {},
             "external_executor_id": None,
             "hostname": "",
-            "job_id": None,
+            "id": unittest.mock.ANY,  # Ignore the `id` field
+            "last_heartbeat_at": None,
             "map_index": -1,
             "max_tries": 0,
             "next_kwargs": None,
@@ -1129,14 +1194,18 @@ def test_task_instances(admin_client):
             "queue": "default",
             "queued_by_job_id": None,
             "queued_dttm": None,
+            "scheduled_dttm": None,
+            "rendered_map_index": None,
             "run_id": "TEST_DAGRUN",
             "start_date": None,
             "state": None,
+            "task_display_name": "this_will_skip",
             "task_id": "this_will_skip",
             "trigger_id": None,
             "trigger_timeout": None,
-            "try_number": 1,
+            "try_number": 0,
             "unixname": getuser(),
             "updated_at": DEFAULT_DATE.isoformat(),
+            "dag_version_id": mock.ANY,
         },
     }

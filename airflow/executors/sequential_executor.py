@@ -22,13 +22,14 @@ SequentialExecutor.
     For more information on how the SequentialExecutor works, take a look at the guide:
     :ref:`executor:SequentialExecutor`
 """
+
 from __future__ import annotations
 
 import subprocess
 from typing import TYPE_CHECKING, Any
 
 from airflow.executors.base_executor import BaseExecutor
-from airflow.utils.state import State
+from airflow.traces.tracer import Trace, add_span
 
 if TYPE_CHECKING:
     from airflow.executors.base_executor import CommandType
@@ -47,10 +48,7 @@ class SequentialExecutor(BaseExecutor):
     SequentialExecutor alongside sqlite as you first install it.
     """
 
-    supports_pickling: bool = False
-
     is_local: bool = True
-    is_single_threaded: bool = True
     is_production: bool = False
 
     serve_logs: bool = True
@@ -59,6 +57,7 @@ class SequentialExecutor(BaseExecutor):
         super().__init__()
         self.commands_to_run = []
 
+    @add_span
     def execute_async(
         self,
         key: TaskInstanceKey,
@@ -69,16 +68,28 @@ class SequentialExecutor(BaseExecutor):
         self.validate_airflow_tasks_run_command(command)
         self.commands_to_run.append((key, command))
 
+        span = Trace.get_current_span()
+        if span.is_recording():
+            span.set_attributes(
+                {
+                    "dag_id": key.dag_id,
+                    "run_id": key.run_id,
+                    "task_id": key.task_id,
+                    "try_number": key.try_number,
+                    "commands_to_run": str(self.commands_to_run),
+                }
+            )
+
     def sync(self) -> None:
         for key, command in self.commands_to_run:
             self.log.info("Executing command: %s", command)
 
             try:
                 subprocess.check_call(command, close_fds=True)
-                self.change_state(key, State.SUCCESS)
+                self.success(key)
             except subprocess.CalledProcessError as e:
-                self.change_state(key, State.FAILED)
-                self.log.error("Failed to execute task %s.", str(e))
+                self.fail(key)
+                self.log.error("Failed to execute task %s.", e)
 
         self.commands_to_run = []
 

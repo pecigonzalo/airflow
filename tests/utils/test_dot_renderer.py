@@ -20,17 +20,26 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pytest
+
 from airflow.models.dag import DAG
-from airflow.operators.bash import BashOperator
-from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import PythonOperator
-from airflow.serialization.serialized_objects import DagDependency
+from airflow.providers.standard.operators.empty import EmptyOperator
+from airflow.serialization.dag_dependency import DagDependency
 from airflow.utils import dot_renderer, timezone
 from airflow.utils.state import State
 from airflow.utils.task_group import TaskGroup
-from tests.test_utils.db import clear_db_dags
+
+from tests_common.test_utils.compat import BashOperator
+from tests_common.test_utils.db import clear_db_dags
+
+try:
+    from airflow.providers.standard.operators.python import PythonOperator
+except ImportError:
+    from airflow.operators.python import PythonOperator  # type: ignore[no-redef,attr-defined]
 
 START_DATE = timezone.utcnow()
+
+pytestmark = pytest.mark.db_test
 
 
 class TestDotRenderer:
@@ -62,7 +71,7 @@ class TestDotRenderer:
         assert "task_2 -> dag_three" in dot.source
 
     def test_should_render_dag(self):
-        with DAG(dag_id="DAG_ID") as dag:
+        with DAG(dag_id="DAG_ID", schedule=None) as dag:
             task_1 = BashOperator(start_date=START_DATE, task_id="first", bash_command="echo 1")
             task_2 = BashOperator(start_date=START_DATE, task_id="second", bash_command="echo 1")
             task_3 = PythonOperator(start_date=START_DATE, task_id="third", python_callable=mock.MagicMock())
@@ -89,7 +98,7 @@ class TestDotRenderer:
             task_1 >> task_2
             task_1 >> task_3
 
-        tis = {ti.task_id: ti for ti in dag_maker.create_dagrun(execution_date=START_DATE).task_instances}
+        tis = {ti.task_id: ti for ti in dag_maker.create_dagrun(logical_date=START_DATE).task_instances}
         tis["first"].state = State.SCHEDULED
         tis["second"].state = State.SUCCESS
         tis["third"].state = State.RUNNING
@@ -111,14 +120,16 @@ class TestDotRenderer:
 
     def test_should_render_dag_with_mapped_operator(self, session, dag_maker):
         with dag_maker(dag_id="DAG_ID", session=session) as dag:
-            BashOperator.partial(task_id="first").expand(bash_command=["echo hello", "echo world"])
+            BashOperator.partial(task_id="first", task_display_name="First Task").expand(
+                bash_command=["echo hello", "echo world"]
+            )
 
         dot = dot_renderer.render_dag(dag)
         source = dot.source
         # Should render DAG title
         assert "label=DAG_ID" in source
         assert (
-            'first [color="#000000" fillcolor="#f0ede4" label=first shape=rectangle style="filled,rounded"]'
+            'first [color="#000000" fillcolor="#f0ede4" label="First Task" shape=rectangle style="filled,rounded"]'
             in source
         )
 
@@ -131,7 +142,7 @@ class TestDotRenderer:
             task_1 >> task_2
             task_1 >> task_3
 
-        tis = dag_maker.create_dagrun(execution_date=START_DATE).task_instances
+        tis = dag_maker.create_dagrun(logical_date=START_DATE).task_instances
         tis[0].state = State.SCHEDULED
         tis[1].state = State.SUCCESS
         tis[2].state = State.RUNNING
@@ -144,7 +155,7 @@ class TestDotRenderer:
 
         # Change orientation
         orientation = "LR"
-        dag = DAG(dag_id="DAG_ID", orientation=orientation)
+        dag = DAG(dag_id="DAG_ID", schedule=None, orientation=orientation)
         dot = dot_renderer.render_dag(dag, tis=tis)
         source = dot.source
         # Should render DAG title with orientation
@@ -152,7 +163,7 @@ class TestDotRenderer:
         assert f"label=DAG_ID labelloc=t rankdir={orientation}" in source
 
     def test_render_task_group(self):
-        with DAG(dag_id="example_task_group", start_date=START_DATE) as dag:
+        with DAG(dag_id="example_task_group", schedule=None, start_date=START_DATE) as dag:
             start = EmptyOperator(task_id="start")
 
             with TaskGroup("section_1", tooltip="Tasks for section_1") as section_1:

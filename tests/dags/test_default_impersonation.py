@@ -17,11 +17,11 @@
 # under the License.
 from __future__ import annotations
 
+import textwrap
 from datetime import datetime
-from textwrap import dedent
 
-from airflow.models import DAG
-from airflow.operators.bash import BashOperator
+from airflow.models.dag import DAG
+from airflow.providers.standard.operators.bash import BashOperator
 
 DEFAULT_DATE = datetime(2016, 1, 1)
 
@@ -30,19 +30,17 @@ args = {
     "start_date": DEFAULT_DATE,
 }
 
-dag = DAG(dag_id="test_default_impersonation", default_args=args)
+dag = DAG(dag_id="test_default_impersonation", schedule=None, default_args=args)
 
 deelevated_user = "airflow_test_user"
 
-test_command = dedent(
-    """\
-    if [ '{user}' != "$(whoami)" ]; then
-        echo current user $(whoami) is not {user}!
+test_command = textwrap.dedent(
+    f"""\
+    if [ '{deelevated_user}' != "$(whoami)" ]; then
+        echo current user $(whoami) is not {deelevated_user}!
         exit 1
     fi
-    """.format(
-        user=deelevated_user
-    )
+    """
 )
 
 task = BashOperator(

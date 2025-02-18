@@ -24,8 +24,11 @@ from unittest import mock
 import pytest
 
 from airflow.security import kerberos
-from airflow.security.kerberos import renew_from_kt
-from tests.test_utils.config import conf_vars
+from airflow.security.kerberos import get_kerberos_principal, renew_from_kt
+
+from tests_common.test_utils.config import conf_vars
+
+pytestmark = pytest.mark.db_test
 
 
 class TestKerberos:
@@ -165,8 +168,8 @@ class TestKerberos:
         mock_subp.stdout = mock.MagicMock(name="stdout", **{"readlines.return_value": ["STDOUT"]})
         mock_subp.stderr = mock.MagicMock(name="stderr", **{"readlines.return_value": ["STDERR"]})
 
+        caplog.clear()
         with pytest.raises(SystemExit) as ctx:
-            caplog.clear()
             renew_from_kt(principal="test-principal", keytab="keytab")
         assert ctx.value.code == 1
 
@@ -176,7 +179,7 @@ class TestKerberos:
         assert [lr[2] for lr in log_records] == [
             "Re-initialising kerberos from keytab: "
             "kinit -f -a -r 3600m -k -t keytab -c /tmp/airflow_krb5_ccache test-principal",
-            "Couldn't reinit from keytab! `kinit' exited with 1.\nSTDOUT\nSTDERR",
+            "Couldn't reinit from keytab! `kinit` exited with 1.\nSTDOUT\nSTDERR",
         ]
 
         assert mock_subprocess.mock_calls == [
@@ -214,8 +217,8 @@ class TestKerberos:
         mock_subprocess.Popen.return_value.__enter__.return_value.returncode = 0
         mock_subprocess.call.return_value = 1
 
+        caplog.clear()
         with pytest.raises(SystemExit) as ctx:
-            caplog.clear()
             renew_from_kt(principal="test-principal", keytab="keytab")
         assert ctx.value.code == 1
 
@@ -262,9 +265,9 @@ class TestKerberos:
         ]
 
     def test_run_without_keytab(self, caplog):
-        with pytest.raises(SystemExit) as ctx:
-            with caplog.at_level(logging.WARNING, logger=kerberos.log.name):
-                caplog.clear()
+        with caplog.at_level(logging.WARNING, logger=kerberos.log.name):
+            caplog.clear()
+            with pytest.raises(SystemExit) as ctx:
                 kerberos.run(principal="test-principal", keytab=None)
         assert ctx.value.code == 0
         assert caplog.messages == ["Keytab renewer not starting, no keytab configured"]
@@ -281,3 +284,14 @@ class TestKerberos:
             mock.call("test-principal", "/tmp/keytab"),
             mock.call("test-principal", "/tmp/keytab"),
         ]
+
+    def test_get_kerberos_principal(self):
+        expected_principal = "test-principal"
+        principal = get_kerberos_principal(expected_principal)
+        assert principal == expected_principal
+
+    @mock.patch("airflow.security.kerberos.get_hostname", return_value="REPLACEMENT_HOST")
+    @mock.patch("airflow.security.kerberos.conf.get_mandatory_value", return_value="test-principal/_HOST")
+    def test_get_kerberos_principal_resolve_null_principal(self, get_madantory_value_mock, get_hostname_mock):
+        principal = get_kerberos_principal(principal=None)
+        assert principal == "test-principal/REPLACEMENT_HOST"

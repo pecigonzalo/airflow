@@ -20,8 +20,8 @@
 from __future__ import annotations
 
 """Nice formatted include for examples"""
+import os
 import traceback
-from os import path
 
 from docutils import nodes
 
@@ -188,7 +188,14 @@ def create_node(env, relative_path, show_button):
     :param show_button: whether to show "view code" button
     :return paragraph with the node
     """
-    pagename = "_modules/" + relative_path[:-3]
+
+    if relative_path.startswith("providers/"):
+        relative_path = relative_path.replace("providers/", "", 1)
+
+    if relative_path.endswith(".py"):
+        pagename = "_modules/" + relative_path[:-3]
+    else:
+        pagename = "_modules/" + relative_path
 
     header_classes = ["example-header"]
     if show_button:
@@ -227,8 +234,8 @@ def doctree_read(app, doctree):
 
     for objnode in doctree.traverse(ExampleHeader):
         filepath = objnode.get("filename")
-        relative_path = path.relpath(
-            filepath, path.commonprefix([app.config.exampleinclude_sourceroot, filepath])
+        relative_path = os.path.relpath(
+            filepath, os.path.commonprefix([app.config.exampleinclude_sourceroot, filepath])
         )
         modname = relative_path.replace("/", ".")[:-3]
         show_button = register_source(app, env, modname)

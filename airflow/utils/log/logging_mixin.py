@@ -20,24 +20,29 @@ from __future__ import annotations
 import abc
 import enum
 import logging
-import re
 import sys
-from io import IOBase
-from logging import Handler, Logger, StreamHandler
-from typing import IO, Any, TypeVar, cast
+from io import TextIOBase, UnsupportedOperation
+from logging import Handler, StreamHandler
+from typing import IO, TYPE_CHECKING, Any, Optional, TypeVar, cast
+
+import re2
+
+if TYPE_CHECKING:
+    from logging import Logger
 
 # 7-bit C1 ANSI escape sequences
-ANSI_ESCAPE = re.compile(r"\x1B[@-_][0-?]*[ -/]*[@-~]")
+ANSI_ESCAPE = re2.compile(r"\x1B[@-_][0-?]*[ -/]*[@-~]")
 
 
 # Private: A sentinel objects
 class SetContextPropagate(enum.Enum):
-    """Sentinel objects for log propagation contexts.
+    """
+    Sentinel objects for log propagation contexts.
 
     :meta private:
     """
 
-    # If a `set_context` function wants to _keep_ propagation set on it's logger it needs to return this
+    # If a `set_context` function wants to _keep_ propagation set on its logger it needs to return this
     # special value.
     MAINTAIN_PROPAGATE = object()
     # Don't use this one anymore!
@@ -53,10 +58,7 @@ def __getattr__(name):
 
 
 def remove_escape_codes(text: str) -> str:
-    """
-    Remove ANSI escapes codes from string. It's used to remove
-    "colors" from log messages.
-    """
+    """Remove ANSI escapes codes from string; used to remove "colors" from log messages."""
     return ANSI_ESCAPE.sub("", text)
 
 
@@ -68,23 +70,59 @@ class LoggingMixin:
 
     _log: logging.Logger | None = None
 
+    # Parent logger used by this class. It should match one of the loggers defined in the
+    # `logging_config_class`. By default, this attribute is used to create the final name of the logger, and
+    # will prefix the `_logger_name` with a separating dot.
+    _log_config_logger_name: Optional[str] = None  # noqa: UP007
+
+    _logger_name: Optional[str] = None  # noqa: UP007
+
     def __init__(self, context=None):
         self._set_context(context)
+        super().__init__()
 
     @staticmethod
-    def _get_log(obj: Any, clazz: type[_T]) -> Logger:
+    def _create_logger_name(
+        logged_class: type[_T],
+        log_config_logger_name: str | None = None,
+        class_logger_name: str | None = None,
+    ) -> str:
+        """
+        Generate a logger name for the given `logged_class`.
+
+        By default, this function returns the `class_logger_name` as logger name. If it is not provided,
+        the {class.__module__}.{class.__name__} is returned instead. When a `parent_logger_name` is provided,
+        it will prefix the logger name with a separating dot.
+        """
+        logger_name: str = (
+            class_logger_name
+            if class_logger_name is not None
+            else f"{logged_class.__module__}.{logged_class.__name__}"
+        )
+
+        if log_config_logger_name:
+            return f"{log_config_logger_name}.{logger_name}" if logger_name else log_config_logger_name
+        return logger_name
+
+    @classmethod
+    def _get_log(cls, obj: Any, clazz: type[_T]) -> Logger:
         if obj._log is None:
-            obj._log = logging.getLogger(f"{clazz.__module__}.{clazz.__name__}")
+            logger_name: str = cls._create_logger_name(
+                logged_class=clazz,
+                log_config_logger_name=obj._log_config_logger_name,
+                class_logger_name=obj._logger_name,
+            )
+            obj._log = logging.getLogger(logger_name)
         return obj._log
 
     @classmethod
     def logger(cls) -> Logger:
-        """Returns a logger."""
+        """Return a logger."""
         return LoggingMixin._get_log(cls, cls)
 
     @property
     def log(self) -> Logger:
-        """Returns a logger."""
+        """Return a logger."""
         return LoggingMixin._get_log(self, self.__class__)
 
     def _set_context(self, context):
@@ -112,20 +150,41 @@ class ExternalLoggingMixin:
 
 # We have to ignore typing errors here because Python I/O classes are a mess, and they do not
 # have the same type hierarchy defined as the `typing.IO` - they violate Liskov Substitution Principle
-# While it is ok to make your class derive from IOBase (and its good thing to do as they provide
+# While it is ok to make your class derive from TextIOBase (and its good thing to do as they provide
 # base implementation for IO-implementing classes, it's impossible to make them work with
 # IO generics (and apparently it has not even been intended)
 # See more: https://giters.com/python/typeshed/issues/6077
-class StreamLogWriter(IOBase, IO[str]):  # type: ignore[misc]
-    """Allows to redirect stdout and stderr to logger."""
+class StreamLogWriter(TextIOBase, IO[str]):  # type: ignore[misc]
+    """
+    Allows to redirect stdout and stderr to logger.
 
-    encoding: None = None
+    :param logger: The logging.Logger instance to write to
+    :param level: The log level method to write to, ie. logging.DEBUG, logging.WARNING
+    """
+
+    encoding = "undefined"
+
+    @property
+    def mode(self):
+        return "w"
+
+    @property
+    def name(self):
+        return f"<logger: {self.logger.name}>"
+
+    def writable(self):
+        return True
+
+    def readable(self):
+        return False
+
+    def seekable(self):
+        return False
+
+    def fileno(self):
+        raise UnsupportedOperation("fileno")
 
     def __init__(self, logger, level):
-        """
-        :param log: The log level method to write to, ie. log.debug, log.warning
-        :return:
-        """
         self.logger = logger
         self.level = level
         self._buffer = ""
@@ -140,8 +199,9 @@ class StreamLogWriter(IOBase, IO[str]):  # type: ignore[misc]
     @property
     def closed(self):
         """
-        Returns False to indicate that the stream is not closed, as it will be
-        open for the duration of Airflow's lifecycle.
+        Return False to indicate that the stream is not closed.
+
+        Streams will be open for the duration of Airflow's lifecycle.
 
         For compatibility with the io.IOBase interface.
         """
@@ -157,22 +217,26 @@ class StreamLogWriter(IOBase, IO[str]):  # type: ignore[misc]
 
         :param message: message to log
         """
-        if not message.endswith("\n"):
+        if message.endswith("\n"):
+            message = message.rstrip()
             self._buffer += message
-        else:
-            self._buffer += message.rstrip()
             self.flush()
+        else:
+            self._buffer += message
+
+        return len(message)
 
     def flush(self):
         """Ensure all logging output has been flushed."""
         buf = self._buffer
-        if len(buf) > 0:
+        if buf:
             self._buffer = ""
             self._propagate_log(buf)
 
     def isatty(self):
         """
-        Returns False to indicate the fd is not connected to a tty(-like) device.
+        Return False to indicate the fd is not connected to a tty(-like) device.
+
         For compatibility reasons.
         """
         return False
@@ -180,15 +244,17 @@ class StreamLogWriter(IOBase, IO[str]):  # type: ignore[misc]
 
 class RedirectStdHandler(StreamHandler):
     """
+    Custom StreamHandler that uses current sys.stderr/stdout as the stream for logging.
+
     This class is like a StreamHandler using sys.stderr/stdout, but uses
-    whatever sys.stderr/stderr is currently set to rather than the value of
+    whatever sys.stderr/stdout is currently set to rather than the value of
     sys.stderr/stdout at handler construction time, except when running a
     task in a kubernetes executor pod.
     """
 
     def __init__(self, stream):
         if not isinstance(stream, str):
-            raise Exception(
+            raise TypeError(
                 "Cannot use file like objects. Use 'stdout' or 'stderr' as a str and without 'ext://'."
             )
 
@@ -204,9 +270,9 @@ class RedirectStdHandler(StreamHandler):
     @property
     def stream(self):
         """Returns current stream."""
-        from airflow.settings import IS_K8S_EXECUTOR_POD
+        from airflow.settings import IS_EXECUTOR_CONTAINER, IS_K8S_EXECUTOR_POD
 
-        if IS_K8S_EXECUTOR_POD:
+        if IS_K8S_EXECUTOR_POD or IS_EXECUTOR_CONTAINER:
             return self._orig_stream
         if self._use_stderr:
             return sys.stderr
@@ -216,7 +282,7 @@ class RedirectStdHandler(StreamHandler):
 
 def set_context(logger, value):
     """
-    Walks the tree of loggers and tries to set the context for each handler.
+    Walk the tree of loggers and try to set the context for each handler.
 
     :param logger: logger
     :param value: value to set

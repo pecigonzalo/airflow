@@ -17,11 +17,11 @@
 # under the License.
 from __future__ import annotations
 
+import textwrap
 from datetime import datetime
-from textwrap import dedent
 
-from airflow.models import DAG
-from airflow.operators.bash import BashOperator
+from airflow.models.dag import DAG
+from airflow.providers.standard.operators.bash import BashOperator
 
 DEFAULT_DATE = datetime(2016, 1, 1)
 
@@ -30,9 +30,9 @@ args = {
     "start_date": DEFAULT_DATE,
 }
 
-dag = DAG(dag_id="test_no_impersonation", default_args=args)
+dag = DAG(dag_id="test_no_impersonation", schedule=None, default_args=args)
 
-test_command = dedent(
+test_command = textwrap.dedent(
     """\
     sudo ls
     if [ $? -ne 0 ]; then
